@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <artifactId>rmil.parent</artifactId>
+        <groupId>dev.rea</groupId>
+        <version>0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>rmil.client</artifactId>
+    <packaging>jar</packaging>
+
+    <name>RMI-L Client</name>
+    <description>Allows easy distribution of functions and items to remote RMI-L containers</description>
+    <url>//todo//</url>
+
+    <dependencies>
+        <dependency>
+            <groupId>dev.rea</groupId>
+            <artifactId>rmil.remote</artifactId>
+            <version>0.1-SNAPSHOT</version>
+        </dependency>
+    </dependencies>
+
+</project>
