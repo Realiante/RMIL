@@ -1,10 +1,11 @@
 package rea.dev.rmil.remote;
 
-import java.io.Serializable;
 import java.rmi.Remote;
+import java.util.UUID;
 
-public interface DistributedFunction<R> extends Remote, Serializable {
+public interface DistributedFunction extends Remote {
 
-    R apply();
+    <T> DistributedItem<T> applyFunction(UUID fID, DistributedItem<T> item);
 
+    <T, R> DistributedItem<T> applyBiFunction(UUID fID, DistributedItem<T> returnTypeItem, DistributedItem<R> modifierItem);
 }

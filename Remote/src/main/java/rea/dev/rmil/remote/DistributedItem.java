@@ -7,4 +7,6 @@ public interface DistributedItem<T> extends Remote, Serializable {
 
     T get();
 
+    //todo: Fetches the latest version of the item
+
 }
