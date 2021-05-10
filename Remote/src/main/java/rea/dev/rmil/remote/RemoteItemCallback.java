@@ -14,6 +14,6 @@ public interface RemoteItemCallback extends Serializable, Remote {
 
     <T> DistributedItem<? super T> requestNewItem(UUID functionID, DistributedItem<? super T> returnValue);
 
-    Optional<FunctionPackage> register();
+    Optional<FunctionPackage> registerContainer();
 
 }
