@@ -1,9 +1,7 @@
 package rea.dev.rmil.remote;
 
-import java.io.Serializable;
-
 @FunctionalInterface
-public interface DistBiFunction<T, A, R> extends Serializable {
+public interface DistBiFunction<T, A, R> extends BaseFunction {
 
     R execute(T argument, A anotherArg);
 
