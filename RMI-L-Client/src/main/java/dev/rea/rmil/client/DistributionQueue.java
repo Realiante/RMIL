@@ -1,4 +1,4 @@
-package dev.rea.rmil.client.distribution;
+package dev.rea.rmil.client;
 
 import rea.dev.rmil.remote.items.DistributedItem;
 
