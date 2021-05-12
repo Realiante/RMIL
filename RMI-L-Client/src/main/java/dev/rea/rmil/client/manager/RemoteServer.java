@@ -7,11 +7,10 @@ import rea.dev.rmil.remote.RemoteExecutorContainer;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
-import java.rmi.registry.Registry;
 import java.util.Objects;
 import java.util.UUID;
 
-public class RemoteServer {
+public final class RemoteServer {
 
     private static final Logger logger = LoggerFactory.getLogger(RemoteServer.class);
 
@@ -19,20 +18,21 @@ public class RemoteServer {
     private final String address;
     private final int port;
 
-    private boolean loaded;
-    private final int maxTasks;
-    private Registry registry;
+    private boolean loaded = false;
     private RemoteExecutorContainer executorContainer;
 
     public RemoteServer(String address, int port) {
         this.address = address;
         this.port = port;
-        this.maxTasks = 0;
         this.serverID = UUID.fromString(String.format("%s:%s", address, port));
+        attemptLoad();
+    }
 
+    public void attemptLoad() {
         try {
-            this.registry = LocateRegistry.getRegistry(address, port);
+            var registry = LocateRegistry.getRegistry(address, port);
             this.executorContainer = (RemoteExecutorContainer) registry.lookup("engine");
+            this.loaded = true;
         } catch (RemoteException | NotBoundException exception) {
             var serverName = String.format("%s:%s", address, port);
             logger.debug("Failed to locate server " + serverName, exception);
@@ -44,12 +44,12 @@ public class RemoteServer {
         return address;
     }
 
-    public int getMaxTasks() {
-        return maxTasks;
-    }
-
     public boolean isLoaded() {
         return loaded;
+    }
+
+    public RemoteExecutorContainer getExecutorContainer() {
+        return executorContainer;
     }
 
     @Override
@@ -63,5 +63,9 @@ public class RemoteServer {
     @Override
     public int hashCode() {
         return Objects.hash(address, port);
+    }
+
+    public void release() {
+        //todo: release all server resources
     }
 }
