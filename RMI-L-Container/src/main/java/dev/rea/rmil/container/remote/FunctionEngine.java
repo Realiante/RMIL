@@ -16,7 +16,7 @@ public class FunctionEngine extends UnicastRemoteObject implements RemoteExecuto
 
 
     @Override
-    public void registerFunction(FunctionPackage functionPackage) {
+    public void registerFunction(FunctionPackage functionPackage, boolean askForItems) {
 
     }
 

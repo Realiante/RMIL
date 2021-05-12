@@ -14,7 +14,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 
-public class DistributionManagerImpl implements DistributionManager {
+public final class DistributionManagerImpl implements DistributionManager {
 
     private final DistributionTactic distTactic;
     private final RmilConfig config;
@@ -32,7 +32,7 @@ public class DistributionManagerImpl implements DistributionManager {
         this.config = config;
         this.localCounter = new AtomicInteger(0);
         if (distTactic != DistributionTactic.LOCAL_ONLY) {
-            //todo: create a mechanism to get a set of all server addresses and remove this test set;
+            //todo: create a mechanism to get a set of all server addresses and remove this test set
             Set<ServerAddress> addresses = Set.of(new ServerAddress("localhost", 51199));
             availableServers.addAll(addresses.stream().map(servAddr -> {
                 var server = new RemoteServer(servAddr.getAddress(), servAddr.getPort());
@@ -71,7 +71,7 @@ public class DistributionManagerImpl implements DistributionManager {
                     //this non terminated switch case is intentional.
                     //if you need to start a new task over local limit, start it as remote instead.
                 case REMOTE_ONLY:
-
+                    return executeFunctionTask(functionID, argument);
                 case LOCAL_ONLY:
             }
             return ttDistPredicate.execute(argument);
@@ -84,29 +84,30 @@ public class DistributionManagerImpl implements DistributionManager {
      *
      * @return Optional server
      */
-    private synchronized Optional<RemoteServer> getNextTaskAvailable() {
-        var serverOpt = availableServers.stream().findFirst();
-        serverOpt.ifPresent(availableServers::remove);
+    private synchronized Optional<UUID> getNextTaskAvailable() {
+        var serverOpt = taskAvailableServers.stream().findFirst();
+        serverOpt.ifPresent(taskAvailableServers::remove);
         return serverOpt;
     }
 
-    //todo: sends function to all available servers, queuing it up. When server is ready, it will ask for an item.
-    //todo: actually implement that?
-    protected void sendRemoteFunctionTask(UUID functionID, BaseFunction funcTask) {
+
+    private void sendRemoteFunctionTask(UUID functionID, BaseFunction funcTask) {
         availableServers.forEach(remoteServer -> remoteServer.getExecutorContainer()
-                .registerFunction(new FunctionPackage(functionID, funcTask)));
+                .registerFunction(new FunctionPackage(functionID, funcTask), false));
     }
 
-    protected <R, T> R executeFunctionTask(UUID functionID, T argument) {
+    private <R, T> R executeFunctionTask(UUID functionID, T argument) {
         //todo: wait until a server becomes available
-        var taskServer = getNextTaskAvailable().orElseThrow();
+        var serverID = getNextTaskAvailable().orElseThrow();
+        var taskServer = serverMap.get(serverID);
         return taskServer.getExecutorContainer().executeTask(functionID, argument);
     }
 
-    protected <R, T, A> R executeBiFunctionTask(UUID functionID, T argument, A anotherArg) {
+    private <R, T, A> R executeBiFunctionTask(UUID functionID, T argument, A anotherArg) {
         //todo: wait until a server becomes available
-        var taskServer = getNextTaskAvailable().orElseThrow();
-        return taskServer.getExecutorContainer().executeTask(functionID, argument);
+        var serverID = getNextTaskAvailable().orElseThrow();
+        var taskServer = serverMap.get(serverID);
+        return taskServer.getExecutorContainer().executeBiTask(functionID, argument, anotherArg);
     }
 
     public void stop() {

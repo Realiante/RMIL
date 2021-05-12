@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public interface RemoteExecutorContainer extends Remote, Serializable {
 
-    void registerFunction(FunctionPackage functionPackage);
+    void registerFunction(FunctionPackage functionPackage, boolean askForItems);
 
     boolean removeFunction(UUID functionID);
 
