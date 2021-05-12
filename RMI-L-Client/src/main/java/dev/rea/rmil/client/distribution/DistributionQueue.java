@@ -8,18 +8,16 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
-public abstract class DistributionQueue<T> {
+public class DistributionQueue<T> {
 
     private final Queue<DistributedItem<? super T>> inactiveQueue = new ConcurrentLinkedDeque<>();
     private final Map<UUID, DistributedItem<? super T>> activeMap = new HashMap<>();
-    private UUID functionID;
 
-    protected DistributionQueue() {
-
+    public DistributionQueue() {
+        //empty
     }
 
     public synchronized void put(DistributedItem<T> item) {
-        onPut(item.getItemID());
         inactiveQueue.add(item);
     }
 
@@ -42,26 +40,10 @@ public abstract class DistributionQueue<T> {
             item = inactiveQueue.poll();
             activeMap.put(item.getItemID(), item);
         }
-        onGet(item.getItemID());
         return item;
     }
 
     public synchronized boolean removeCompleted(UUID itemID) {
-        onRemove(itemID);
         return activeMap.remove(itemID) != null;
-    }
-
-    protected abstract void onGet(UUID itemID);
-
-    protected abstract void onPut(UUID itemID);
-
-    protected abstract void onRemove(UUID itemID);
-
-    public UUID getFunctionID() {
-        return functionID;
-    }
-
-    protected void setFunctionID(UUID functionID) {
-        this.functionID = functionID;
     }
 }
