@@ -5,10 +5,11 @@ import dev.rea.rmil.container.remote.FunctionEngine;
 import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.RemoteException;
+import java.util.UUID;
 
 public class RmilContainerStarter {
 
-    private static int maxTasks;
+    private static int maxThreads;
 
     public static void main(String[] args) {
         if (args.length < 2 || args.length > 3) {
@@ -22,13 +23,13 @@ public class RmilContainerStarter {
         var address = args[0];
         var port = args[1];
         var name = String.format("//%s:%s/engine", address, port);
-        maxTasks = Runtime.getRuntime().availableProcessors();
+        maxThreads = Runtime.getRuntime().availableProcessors();
         if (args.length > 2)
-            maxTasks = Integer.parseInt(args[2]);
+            maxThreads = Integer.parseInt(args[2]);
 
         try {
             //todo: port and socket factories
-            FunctionEngine engine = new FunctionEngine(maxTasks);
+            FunctionEngine engine = new FunctionEngine(maxThreads, UUID.fromString(name));
             Naming.rebind(name, engine);
         } catch (RemoteException | MalformedURLException e) {
             e.printStackTrace();
