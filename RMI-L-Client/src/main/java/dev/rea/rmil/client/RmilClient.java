@@ -14,6 +14,10 @@ public class RmilClient {
         return manager;
     }
 
+    public static DistributionManager createLocalOnlyManager() {
+        return createManager("localhost", 51199, new RmilConfig(), DistributionTactic.LOCAL_ONLY);
+    }
+
     public static DistributionManager createManager(String address) {
         return createManager(address, 51199, new RmilConfig(), DistributionTactic.STANDARD);
     }

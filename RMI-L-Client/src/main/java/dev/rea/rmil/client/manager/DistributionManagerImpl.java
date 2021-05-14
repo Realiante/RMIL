@@ -30,23 +30,26 @@ public final class DistributionManagerImpl implements DistributionManager {
         this.config = config;
         this.localCounter = new AtomicInteger(0);
 
-        if (distTactic != DistributionTactic.LOCAL_ONLY) {
-            //todo: create a mechanism to get a set of all server addresses and remove this test set
-            Set<ServerAddress> addresses = Set.of(new ServerAddress("localhost", 51199));
-            availableServers.addAll(addresses.stream().map(servAddr -> {
-                var server = new RemoteServer(servAddr.getAddress(), servAddr.getPort());
-                serverMap.put(server.serverID, server);
-                return server;
-            }).filter(server -> {
-                if (!server.isLoaded()) {
-                    unavailableServers.add(server.serverID);
-                    return false;
-                }
-                return true;
-            }).collect(Collectors.toSet()));
-            //todo: create a mechanism of determining what servers are available after initial loading attempt
-            //todo: create a mechanism that pings unavailable servers occasionally
-        }
+        if (distTactic != DistributionTactic.LOCAL_ONLY)
+            availableServers.addAll(getAvailableServers());
+    }
+
+    private Set<RemoteServer> getAvailableServers() {
+        //todo: create a mechanism to get a set of all server addresses and remove this test set
+        Set<ServerAddress> addresses = Set.of(new ServerAddress("localhost", 51199));
+        return addresses.stream().map(servAddr -> {
+            var server = new RemoteServer(servAddr.getAddress(), servAddr.getPort());
+            serverMap.put(server.serverID, server);
+            return server;
+        }).filter(server -> {
+            if (!server.isLoaded()) {
+                unavailableServers.add(server.serverID);
+                return false;
+            }
+            return true;
+        }).collect(Collectors.toSet());
+        //todo: create a mechanism of determining what servers are available after initial loading attempt
+        //todo: create a mechanism that pings unavailable servers occasionally
     }
 
     @SuppressWarnings("java:S128") //suppressing sonarlint warning
