@@ -6,10 +6,12 @@ import dev.rea.rmil.client.DistributionTactic;
 import dev.rea.rmil.client.RmilConfig;
 import rea.dev.rmil.remote.BaseFunction;
 import rea.dev.rmil.remote.DistFunction;
+import rea.dev.rmil.remote.items.DistributedTransfer;
 import rea.dev.rmil.remote.items.FunctionPackage;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -34,7 +36,7 @@ public class DistributionManagerImpl implements DistributionManager {
             availableServers.addAll(getAvailableServers());
     }
 
-    private Set<RemoteServer> getAvailableServers() {
+    protected Set<RemoteServer> getAvailableServers() {
         //todo: create a mechanism to get a set of all server addresses and remove this test set
         Set<ServerAddress> addresses = Set.of(new ServerAddress("localhost", 51199));
         return addresses.stream().map(servAddr -> {
@@ -54,12 +56,10 @@ public class DistributionManagerImpl implements DistributionManager {
 
     @SuppressWarnings("java:S128") //suppressing sonarlint warning
     public <T> Predicate<? super T> filterTask(Predicate<? super T> predicate) {
+        //todo: add mechanism of recognizing existing functions
         var functionID = UUID.randomUUID();
         DistFunction<? super T, Boolean> ttDistPredicate = predicate::test;
         sendRemoteFunctionTask(functionID, ttDistPredicate);
-
-        final DistributionQueue<T> queue = new DistributionQueue<>();
-        functionQueueMap.put(functionID, queue);
 
         return (Predicate<T>) argument -> {
             switch (distTactic) {
@@ -80,34 +80,47 @@ public class DistributionManagerImpl implements DistributionManager {
         };
     }
 
+    protected synchronized <T> void registerQueue(UUID functionID, T argument) {
+        final DistributionQueue<T> queue = new DistributionQueue<>();
+        functionQueueMap.put(functionID, queue);
+        queue.put(new DistributedTransfer<>(argument));
+    }
+
     /**
      * Gets next available server ready for task execution.
      * If no server is available will return an empty optional instead.
      *
      * @return Optional server
      */
-    private synchronized Optional<UUID> getNextTaskAvailable() {
+    protected synchronized Optional<UUID> getNextTaskAvailableServer() {
         var serverOpt = taskAvailableServers.stream().findFirst();
         serverOpt.ifPresent(taskAvailableServers::remove);
         return serverOpt;
     }
 
-
-    private void sendRemoteFunctionTask(UUID functionID, BaseFunction funcTask) {
+    protected void sendRemoteFunctionTask(UUID functionID, BaseFunction funcTask) {
         availableServers.forEach(remoteServer -> remoteServer.getExecutorContainer()
                 .registerFunction(new FunctionPackage(functionID, funcTask), false));
     }
 
-    private <R, T> R executeFunctionTask(UUID functionID, T argument) {
-        //todo: wait until a server becomes available
-        var serverID = getNextTaskAvailable().orElseThrow();
-        var taskServer = serverMap.get(serverID);
-        return taskServer.getExecutorContainer().executeTask(functionID, argument);
+    protected <R, T> R executeFunctionTask(UUID functionID, T argument) {
+        var serverID = getNextTaskAvailableServer();
+        AtomicReference<R> returnValueRef = new AtomicReference<>();
+        serverID.ifPresentOrElse((uuid -> {
+            var taskServer = serverMap.get(uuid);
+            returnValueRef.set(taskServer.getExecutorContainer().executeTask(functionID, argument));
+        }), (() -> returnValueRef.set(executeTaskServerUnavailable(functionID, argument))));
+        return returnValueRef.get();
     }
 
-    private <R, T, A> R executeBiFunctionTask(UUID functionID, T argument, A anotherArg) {
+    protected <R, T> R executeTaskServerUnavailable(UUID functionID, T argument) {
+        //todo: wait until a server becomes available or local becomes available
+        throw new UnsupportedOperationException();
+    }
+
+    protected <R, T, A> R executeBiFunctionTask(UUID functionID, T argument, A anotherArg) {
         //todo: wait until a server becomes available
-        var serverID = getNextTaskAvailable().orElseThrow();
+        var serverID = getNextTaskAvailableServer().orElseThrow();
         var taskServer = serverMap.get(serverID);
         return taskServer.getExecutorContainer().executeBiTask(functionID, argument, anotherArg);
     }

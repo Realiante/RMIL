@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rea.dev.rmil.remote.RemoteExecutorContainer;
 
+import java.nio.charset.StandardCharsets;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -12,7 +13,7 @@ import java.util.UUID;
 
 public final class RemoteServer {
 
-    private static final Logger logger = LoggerFactory.getLogger(RemoteServer.class);
+    private final Logger logger = LoggerFactory.getLogger(RemoteServer.class);
 
     public final UUID serverID;
     private final String address;
@@ -24,7 +25,7 @@ public final class RemoteServer {
     public RemoteServer(String address, int port) {
         this.address = address;
         this.port = port;
-        this.serverID = UUID.fromString(String.format("%s:%s", address, port));
+        this.serverID = UUID.nameUUIDFromBytes(String.format("%s:%s", address, port).getBytes(StandardCharsets.UTF_8));
         attemptLoad();
     }
 
