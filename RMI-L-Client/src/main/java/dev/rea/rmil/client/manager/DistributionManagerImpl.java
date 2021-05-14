@@ -19,18 +19,17 @@ public final class DistributionManagerImpl implements DistributionManager {
     private final DistributionTactic distTactic;
     private final RmilConfig config;
     private final AtomicInteger localCounter;
-    private final Map<UUID, DistributionQueue<?>> functionQueueMap;
+    private final Map<UUID, DistributionQueue<?>> functionQueueMap = new HashMap<>();
     private final Map<UUID, RemoteServer> serverMap = new HashMap<>();
     private final Set<RemoteServer> availableServers = new HashSet<>();
     private final Set<UUID> taskAvailableServers = new HashSet<>();
     private final Set<UUID> unavailableServers = new HashSet<>();
 
     public DistributionManagerImpl(String address, int port, RmilConfig config, DistributionTactic tactic) {
-        functionQueueMap = new HashMap<>();
-
         this.distTactic = tactic;
         this.config = config;
         this.localCounter = new AtomicInteger(0);
+
         if (distTactic != DistributionTactic.LOCAL_ONLY) {
             //todo: create a mechanism to get a set of all server addresses and remove this test set
             Set<ServerAddress> addresses = Set.of(new ServerAddress("localhost", 51199));

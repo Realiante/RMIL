@@ -3,7 +3,6 @@ package dev.rea.rmil.client;
 import dev.rea.rmil.client.manager.DistributionManagerImpl;
 
 public class RmilClient {
-    //todo: create an instance of distribution manager
 
     private static DistributionManagerImpl manager;
 
