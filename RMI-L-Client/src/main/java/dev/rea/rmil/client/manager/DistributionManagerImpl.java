@@ -14,7 +14,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 
-public final class DistributionManagerImpl implements DistributionManager {
+public class DistributionManagerImpl implements DistributionManager {
 
     private final DistributionTactic distTactic;
     private final RmilConfig config;
