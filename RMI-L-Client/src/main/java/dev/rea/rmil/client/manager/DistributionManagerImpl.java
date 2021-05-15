@@ -10,7 +10,6 @@ import rea.dev.rmil.remote.items.DistributedTransfer;
 import rea.dev.rmil.remote.items.FunctionPackage;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -20,20 +19,28 @@ public class DistributionManagerImpl implements DistributionManager {
 
     private final DistributionTactic distTactic;
     private final RmilConfig config;
-    private final AtomicInteger localCounter;
+    private final LocalTaskCounter localCounter;
     private final Map<UUID, DistributionQueue<?>> functionQueueMap = new HashMap<>();
     private final Map<UUID, RemoteServer> serverMap = new HashMap<>();
     private final Set<RemoteServer> availableServers = new HashSet<>();
-    private final Set<UUID> taskAvailableServers = new HashSet<>();
     private final Set<UUID> unavailableServers = new HashSet<>();
+    private Set<UUID> taskAvailableServers;
 
     public DistributionManagerImpl(String address, int port, RmilConfig config, DistributionTactic tactic) {
         this.distTactic = tactic;
         this.config = config;
-        this.localCounter = new AtomicInteger(0);
+        this.localCounter = new LocalTaskCounter(0);
 
-        if (distTactic != DistributionTactic.LOCAL_ONLY)
+        if (distTactic != DistributionTactic.LOCAL_ONLY) {
             availableServers.addAll(getAvailableServers());
+            taskAvailableServers = new HashSet<>(){
+                @Override
+                public boolean add(UUID uuid) {
+                    //todo: Listen to this
+                    return super.add(uuid);
+                }
+            };
+        }
     }
 
     protected Set<RemoteServer> getAvailableServers() {
@@ -108,7 +115,9 @@ public class DistributionManagerImpl implements DistributionManager {
         AtomicReference<R> returnValueRef = new AtomicReference<>();
         serverID.ifPresentOrElse((uuid -> {
             var taskServer = serverMap.get(uuid);
+            taskAvailableServers.remove(uuid);
             returnValueRef.set(taskServer.getExecutorContainer().executeTask(functionID, argument));
+            taskAvailableServers.add(uuid);
         }), (() -> returnValueRef.set(executeTaskServerUnavailable(functionID, argument))));
         return returnValueRef.get();
     }
