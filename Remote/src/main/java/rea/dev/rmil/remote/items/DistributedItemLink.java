@@ -13,7 +13,6 @@ public class DistributedItemLink<T> extends DistributedItem<T> {
     @Override
     public T get() {
         return provider.get(getItemID()).orElseThrow();
-        //todo: Handle possible item mismatch (Item is missing on this server)
     }
 
 }

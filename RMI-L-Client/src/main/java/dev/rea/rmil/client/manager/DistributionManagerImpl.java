@@ -1,7 +1,6 @@
 package dev.rea.rmil.client.manager;
 
 import dev.rea.rmil.client.DistributionManager;
-import dev.rea.rmil.client.DistributionQueue;
 import dev.rea.rmil.client.DistributionTactic;
 import dev.rea.rmil.client.RmilConfig;
 import rea.dev.rmil.remote.BaseFunction;
