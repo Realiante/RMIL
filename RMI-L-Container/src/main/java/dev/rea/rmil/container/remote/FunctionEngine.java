@@ -52,11 +52,6 @@ public class FunctionEngine extends UnicastRemoteObject implements RemoteExecuto
     }
 
     @Override
-    public long heartbeat() {
-        return System.currentTimeMillis();
-    }
-
-    @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;

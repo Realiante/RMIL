@@ -29,7 +29,7 @@ public class RmilContainerStarter {
 
         try {
             //todo: port and socket factories
-            FunctionEngine engine = new FunctionEngine(maxThreads, UUID.fromString(name));
+            var engine = new FunctionEngine(maxThreads, UUID.fromString(name));
             Naming.rebind(name, engine);
         } catch (RemoteException | MalformedURLException e) {
             e.printStackTrace();
