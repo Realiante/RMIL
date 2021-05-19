@@ -3,7 +3,7 @@ package dev.rea.rmil.container.remote;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import rea.dev.rmil.remote.DistFunction;
+import rea.dev.rmil.remote.DistTask;
 import rea.dev.rmil.remote.items.FunctionPackage;
 
 import java.rmi.RemoteException;
@@ -21,7 +21,7 @@ class FunctionEngineTest {
 
         predicateUUID = UUID.randomUUID();
         Predicate<Integer> predicate = integer -> integer > 1;
-        DistFunction<Integer, Boolean> predicateFunction = predicate::test;
+        DistTask<Integer, Boolean> predicateFunction = predicate::test;
         engine.registerFunction(new FunctionPackage(predicateUUID, predicateFunction), false);
 
     }

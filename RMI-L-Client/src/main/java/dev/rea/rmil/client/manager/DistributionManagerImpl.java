@@ -3,8 +3,8 @@ package dev.rea.rmil.client.manager;
 import dev.rea.rmil.client.DistributionManager;
 import dev.rea.rmil.client.DistributionTactic;
 import dev.rea.rmil.client.RmilConfig;
-import rea.dev.rmil.remote.BaseFunction;
-import rea.dev.rmil.remote.DistFunction;
+import rea.dev.rmil.remote.BaseTask;
+import rea.dev.rmil.remote.DistTask;
 import rea.dev.rmil.remote.items.DistributedTransfer;
 import rea.dev.rmil.remote.items.FunctionPackage;
 
@@ -26,7 +26,7 @@ public class DistributionManagerImpl implements DistributionManager {
     private final AtomicInteger localCounter;
 
     private final Map<UUID, DistributionQueue<?>> functionQueueMap = new ConcurrentHashMap<>();
-    private final Map<UUID, BaseFunction> functionMap = new ConcurrentHashMap<>();
+    private final Map<UUID, BaseTask> functionMap = new ConcurrentHashMap<>();
 
     private final Map<UUID, RemoteServer> serverMap = new ConcurrentHashMap<>();
     private final Set<RemoteServer> availableServers = Collections.newSetFromMap(new ConcurrentHashMap<>());
@@ -76,7 +76,7 @@ public class DistributionManagerImpl implements DistributionManager {
 
     public <T> Predicate<? super T> filterTask(Predicate<? super T> predicate) {
         //todo: add mechanism of recognizing existing functions
-        DistFunction<? super T, Boolean> ttDistPredicate = predicate::test;
+        DistTask<? super T, Boolean> ttDistPredicate = predicate::test;
         var functionID = registerFunctionTask(ttDistPredicate);
 
         return (Predicate<T>) argument -> {
@@ -116,10 +116,10 @@ public class DistributionManagerImpl implements DistributionManager {
         return serverOpt;
     }
 
-    protected UUID registerFunctionTask(BaseFunction baseFunction) {
+    protected UUID registerFunctionTask(BaseTask baseTask) {
         var functionID = UUID.randomUUID();
-        functionMap.put(functionID, baseFunction);
-        availableServers.removeAll(sendFunctionAndReturnUnavailable(new FunctionPackage(functionID, baseFunction)));
+        functionMap.put(functionID, baseTask);
+        availableServers.removeAll(sendFunctionAndReturnUnavailable(new FunctionPackage(functionID, baseTask)));
         return functionID;
     }
 
@@ -223,7 +223,7 @@ public class DistributionManagerImpl implements DistributionManager {
             this.listener = server -> {
                 try {
                     if (server == null) {
-                        DistFunction<T, R> function = (DistFunction<T, R>) functionMap.get(functionID);
+                        DistTask<T, R> function = (DistTask<T, R>) functionMap.get(functionID);
                         returnValueRef.set(function.execute(argument));
                         localCounter.decrementAndGet();
                     } else {

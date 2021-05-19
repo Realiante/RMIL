@@ -1,9 +1,9 @@
 package dev.rea.rmil.container.remote;
 
 
-import rea.dev.rmil.remote.BaseFunction;
-import rea.dev.rmil.remote.DistBiFunction;
-import rea.dev.rmil.remote.DistFunction;
+import rea.dev.rmil.remote.BaseTask;
+import rea.dev.rmil.remote.DistBiTask;
+import rea.dev.rmil.remote.DistTask;
 import rea.dev.rmil.remote.RemoteExecutorContainer;
 import rea.dev.rmil.remote.items.FunctionPackage;
 
@@ -17,7 +17,7 @@ import java.util.UUID;
 public class FunctionEngine extends UnicastRemoteObject implements RemoteExecutorContainer {
 
     private final UUID localID;
-    private final Map<UUID, BaseFunction> functionMap = new HashMap<>();
+    private final Map<UUID, BaseTask> functionMap = new HashMap<>();
 
     public FunctionEngine(int maxThreads, UUID localID) throws RemoteException {
         super();
@@ -40,14 +40,14 @@ public class FunctionEngine extends UnicastRemoteObject implements RemoteExecuto
     @SuppressWarnings("unchecked")
     @Override
     public <R, T> R executeTask(UUID functionID, T argument) {
-        DistFunction<T, R> function = (DistFunction<T, R>) functionMap.get(functionID);
+        DistTask<T, R> function = (DistTask<T, R>) functionMap.get(functionID);
         return function.execute(argument);
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public <R, T, A> R executeBiTask(UUID functionID, T argument, A anotherArgument) {
-        DistBiFunction<T, A, R> function = (DistBiFunction<T, A, R>) functionMap.get(functionID);
+        DistBiTask<T, A, R> function = (DistBiTask<T, A, R>) functionMap.get(functionID);
         return function.execute(argument, anotherArgument);
     }
 

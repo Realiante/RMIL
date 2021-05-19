@@ -1,7 +1,7 @@
 package rea.dev.rmil.remote;
 
 @FunctionalInterface
-public interface DistFunction<T,R> extends BaseFunction {
+public interface DistTask<T,R> extends BaseTask {
 
      R execute(T argument);
 

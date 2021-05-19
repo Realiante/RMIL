@@ -1,6 +1,6 @@
 package rea.dev.rmil.remote.items;
 
-import rea.dev.rmil.remote.BaseFunction;
+import rea.dev.rmil.remote.BaseTask;
 
 import java.io.Serializable;
 import java.util.UUID;
@@ -8,9 +8,9 @@ import java.util.UUID;
 public final class FunctionPackage implements Serializable {
 
     private final UUID functionID;
-    private final BaseFunction function;
+    private final BaseTask function;
 
-    public FunctionPackage(UUID functionID, BaseFunction function) {
+    public FunctionPackage(UUID functionID, BaseTask function) {
         this.functionID = functionID;
         this.function = function;
     }
@@ -19,7 +19,7 @@ public final class FunctionPackage implements Serializable {
         return functionID;
     }
 
-    public BaseFunction getFunction() {
+    public BaseTask getFunction() {
         return function;
     }
 
