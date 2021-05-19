@@ -11,11 +11,10 @@ import java.rmi.registry.LocateRegistry;
 import java.util.Objects;
 import java.util.UUID;
 
-public final class RemoteServer {
-
-    private final Logger logger = LoggerFactory.getLogger(RemoteServer.class);
+public class RemoteServer {
 
     public final UUID serverID;
+    private final Logger logger = LoggerFactory.getLogger(RemoteServer.class);
     private final String address;
     private final int port;
 
@@ -29,7 +28,7 @@ public final class RemoteServer {
         attemptLoad();
     }
 
-    public void attemptLoad() {
+    public boolean attemptLoad() {
         try {
             var registry = LocateRegistry.getRegistry(address, port);
             this.executorContainer = (RemoteExecutorContainer) registry.lookup("engine");
@@ -39,6 +38,7 @@ public final class RemoteServer {
             logger.debug("Failed to locate server " + serverName, exception);
             logger.info(String.format("Server %s is not bound or RemoteException occurred", serverName));
         }
+        return loaded;
     }
 
     public String getAddress() {

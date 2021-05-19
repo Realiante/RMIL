@@ -8,6 +8,5 @@ package dev.rea.rmil.client;
  */
 public enum DistributionTactic {
     LOCAL_ONLY,
-    REMOTE_ONLY,
     STANDARD
 }

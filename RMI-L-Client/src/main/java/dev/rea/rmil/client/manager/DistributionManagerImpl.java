@@ -8,7 +8,12 @@ import rea.dev.rmil.remote.DistFunction;
 import rea.dev.rmil.remote.items.DistributedTransfer;
 import rea.dev.rmil.remote.items.FunctionPackage;
 
+import java.rmi.RemoteException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -18,24 +23,33 @@ public class DistributionManagerImpl implements DistributionManager {
 
     private final DistributionTactic distTactic;
     private final RmilConfig config;
-    private final LocalTaskCounter localCounter;
-    private final Map<UUID, DistributionQueue<?>> functionQueueMap = new HashMap<>();
-    private final Map<UUID, RemoteServer> serverMap = new HashMap<>();
-    private final Set<RemoteServer> availableServers = new HashSet<>();
-    private final Set<UUID> unavailableServers = new HashSet<>();
+    private final AtomicInteger localCounter;
+
+    private final Map<UUID, DistributionQueue<?>> functionQueueMap = new ConcurrentHashMap<>();
+    private final Map<UUID, BaseFunction> functionMap = new ConcurrentHashMap<>();
+
+    private final Map<UUID, RemoteServer> serverMap = new ConcurrentHashMap<>();
+    private final Set<RemoteServer> availableServers = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final Set<UUID> unavailableServers = Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+    private final Deque<ServerAvailabilityListener> listenerQueue = new ConcurrentLinkedDeque<>();
     private Set<UUID> taskAvailableServers;
 
     public DistributionManagerImpl(String address, int port, RmilConfig config, DistributionTactic tactic) {
         this.distTactic = tactic;
         this.config = config;
-        this.localCounter = new LocalTaskCounter(0);
+        this.localCounter = new AtomicInteger(0);
 
         if (distTactic != DistributionTactic.LOCAL_ONLY) {
             availableServers.addAll(getAvailableServers());
-            taskAvailableServers = new HashSet<>(){
+            taskAvailableServers = new HashSet<>() {
                 @Override
                 public boolean add(UUID uuid) {
-                    //todo: Listen to this
+                    if (!listenerQueue.isEmpty()) {
+                        var listener = listenerQueue.pop();
+                        listener.onAvailable(uuid);
+                        return true;
+                    }
                     return super.add(uuid);
                 }
             };
@@ -60,36 +74,34 @@ public class DistributionManagerImpl implements DistributionManager {
         //todo: create a mechanism that pings unavailable servers occasionally
     }
 
-    @SuppressWarnings("java:S128") //suppressing sonarlint warning
     public <T> Predicate<? super T> filterTask(Predicate<? super T> predicate) {
         //todo: add mechanism of recognizing existing functions
-        var functionID = UUID.randomUUID();
         DistFunction<? super T, Boolean> ttDistPredicate = predicate::test;
-        sendRemoteFunctionTask(functionID, ttDistPredicate);
+        var functionID = registerFunctionTask(ttDistPredicate);
 
         return (Predicate<T>) argument -> {
-            switch (distTactic) {
-                case STANDARD:
-                    if (localCounter.get() <= config.getMaxLocalTasks()) {
-                        localCounter.incrementAndGet();
-                        var result = ttDistPredicate.execute(argument);
-                        localCounter.decrementAndGet();
-                        return result;
-                    }
-                    //this non terminated switch case is intentional.
-                    //if you need to start a new task over local limit, start it as remote instead.
-                case REMOTE_ONLY:
-                    return executeFunctionTask(functionID, argument);
-                case LOCAL_ONLY:
+            if (distTactic == DistributionTactic.STANDARD) {
+                if (localCounter.incrementAndGet() < config.getMaxLocalTasks()) {
+                    var result = ttDistPredicate.execute(argument);
+                    executeWaitingFunctions(null);
+                    localCounter.decrementAndGet();
+                    return result;
+                }
+                localCounter.decrementAndGet();
+                return executeFunctionTask(new FunctionTask<T, Boolean>(functionID, argument));
             }
             return ttDistPredicate.execute(argument);
         };
     }
 
-    protected synchronized <T> void registerQueue(UUID functionID, T argument) {
-        final DistributionQueue<T> queue = new DistributionQueue<>();
-        functionQueueMap.put(functionID, queue);
-        queue.put(new DistributedTransfer<>(argument));
+    private void executeWaitingFunctions(UUID serverID) {
+        while (!listenerQueue.isEmpty()) {
+            try {
+                listenerQueue.pop().onAvailable(serverID);
+            } catch (NoSuchElementException ignored) {
+                //ignored exception
+            }
+        }
     }
 
     /**
@@ -104,38 +116,135 @@ public class DistributionManagerImpl implements DistributionManager {
         return serverOpt;
     }
 
-    protected void sendRemoteFunctionTask(UUID functionID, BaseFunction funcTask) {
-        availableServers.forEach(remoteServer -> remoteServer.getExecutorContainer()
-                .registerFunction(new FunctionPackage(functionID, funcTask), false));
+    protected UUID registerFunctionTask(BaseFunction baseFunction) {
+        var functionID = UUID.randomUUID();
+        functionMap.put(functionID, baseFunction);
+        availableServers.removeAll(sendFunctionAndReturnUnavailable(new FunctionPackage(functionID, baseFunction)));
+        return functionID;
     }
 
-    protected <R, T> R executeFunctionTask(UUID functionID, T argument) {
+    protected Set<RemoteServer> sendFunctionAndReturnUnavailable(FunctionPackage functionPackage) {
+        Set<RemoteServer> upForRemoval = new HashSet<>();
+        availableServers.forEach(remoteServer -> {
+            try {
+                remoteServer.getExecutorContainer()
+                        .registerFunction(functionPackage, false);
+            } catch (RemoteException e) {
+                //todo: log server is unavailable
+                e.printStackTrace();
+                var sID = remoteServer.serverID;
+                unavailableServers.add(sID);
+                upForRemoval.add(remoteServer);
+            }
+        });
+        return upForRemoval;
+    }
+
+    protected <T, R> R executeFunctionTask(FunctionTask<T, R> functionTask) {
         var serverID = getNextTaskAvailableServer();
-        AtomicReference<R> returnValueRef = new AtomicReference<>();
         serverID.ifPresentOrElse((uuid -> {
-            var taskServer = serverMap.get(uuid);
-            taskAvailableServers.remove(uuid);
-            returnValueRef.set(taskServer.getExecutorContainer().executeTask(functionID, argument));
-            taskAvailableServers.add(uuid);
-        }), (() -> returnValueRef.set(executeTaskServerUnavailable(functionID, argument))));
-        return returnValueRef.get();
+                    if (functionTask.removeListener()) {
+                        try {
+                            functionTask.returnValueRef.set(executeTaskOnServer(uuid,
+                                    functionTask.functionID, functionTask.argument));
+                        } catch (RemoteException e) {
+                            //todo: log server is unavailable
+                            e.printStackTrace();
+                            //todo: add retry mechanism
+                            availableServers.remove(serverMap.get(uuid));
+                            functionTask.listen();
+                            functionTask.returnValueRef.set(executeFunctionTask(functionTask));
+                        }
+                    }
+                }),
+                (() -> functionTask.returnValueRef.set(executeTaskServerUnavailable(functionTask))));
+        return functionTask.returnValueRef.get();
     }
 
-    protected <R, T> R executeTaskServerUnavailable(UUID functionID, T argument) {
-        //todo: wait until a server becomes available or local becomes available
-        throw new UnsupportedOperationException();
-    }
-
-    protected <R, T, A> R executeBiFunctionTask(UUID functionID, T argument, A anotherArg) {
-        //todo: wait until a server becomes available
-        var serverID = getNextTaskAvailableServer().orElseThrow();
+    @SuppressWarnings("java:S6212")
+    //suppressing sonarlint, since replacing line 2 R with var would cause executeTask to return an Object instead of R
+    protected <T, R> R executeTaskOnServer(UUID serverID, UUID functionID, T argument) throws RemoteException {
         var taskServer = serverMap.get(serverID);
-        return taskServer.getExecutorContainer().executeBiTask(functionID, argument, anotherArg);
+        R returnValue = taskServer.getExecutorContainer().executeTask(functionID, argument);
+        executeWaitingFunctions(serverID);
+        taskAvailableServers.add(serverID);
+        return returnValue;
+    }
+
+    @SuppressWarnings({"java:S2222"})
+    //suppressing sonarlint, since if the condition listener is not called, the system has already entered deadlock
+    //which by design will not occur.
+    protected <T, R> R executeTaskServerUnavailable(FunctionTask<T, R> functionTask) {
+        try {
+            //Awaits listener execution
+            if (localCounter.get() <= config.getMaxLocalTasks()) {
+                localCounter.incrementAndGet();
+                executeWaitingFunctions(null);
+                localCounter.decrementAndGet();
+            }
+            functionTask.countDown.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+        return functionTask.returnValueRef.get();
+    }
+
+    protected synchronized <T> void registerQueue(UUID functionID, T argument) {
+        final DistributionQueue<T> queue = new DistributionQueue<>();
+        functionQueueMap.put(functionID, queue);
+        queue.put(new DistributedTransfer<>(argument));
     }
 
     public void stop() {
         //todo: release all resources
     }
 
+    @FunctionalInterface
+    private interface ServerAvailabilityListener {
 
+        void onAvailable(UUID server);
+
+    }
+
+    protected class FunctionTask<T, R> {
+        public final UUID functionID;
+        public final AtomicReference<R> returnValueRef;
+        public final CountDownLatch countDown;
+        private final ServerAvailabilityListener listener;
+        T argument;
+
+        @SuppressWarnings("unchecked")
+        public FunctionTask(UUID functionID, T argument) {
+            this.functionID = functionID;
+            this.argument = argument;
+            this.countDown = new CountDownLatch(1);
+            this.returnValueRef = new AtomicReference<>();
+            this.listener = server -> {
+                try {
+                    if (server == null) {
+                        DistFunction<T, R> function = (DistFunction<T, R>) functionMap.get(functionID);
+                        returnValueRef.set(function.execute(argument));
+                        localCounter.decrementAndGet();
+                    } else {
+                        returnValueRef.set(executeTaskOnServer(server, functionID, argument));
+                    }
+                } catch (Exception e) {
+                    //todo: log this
+                    e.printStackTrace();
+                } finally {
+                    countDown.countDown();
+                }
+            };
+            listenerQueue.add(listener);
+        }
+
+        public boolean removeListener() {
+            return listenerQueue.remove(listener);
+        }
+
+        public void listen() {
+            listenerQueue.add(listener);
+        }
+    }
 }
