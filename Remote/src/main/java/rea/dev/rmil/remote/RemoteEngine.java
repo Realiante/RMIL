@@ -7,7 +7,7 @@ import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.util.UUID;
 
-public interface RemoteExecutorContainer extends Remote, Serializable {
+public interface RemoteEngine extends Remote, Serializable {
 
     void registerFunction(FunctionPackage functionPackage, boolean askForItems) throws RemoteException;
 
