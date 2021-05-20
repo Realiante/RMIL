@@ -1,5 +1,4 @@
-package dev.rea.rmil.container.remote;
-
+package dev.rea.rmil.engine;
 
 import rea.dev.rmil.remote.BaseTask;
 import rea.dev.rmil.remote.DistBiTask;
@@ -14,12 +13,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-public class FunctionEngine extends UnicastRemoteObject implements RemoteExecutorContainer {
+public class RmilEngine extends UnicastRemoteObject implements RemoteExecutorContainer {
 
     private final UUID localID;
     private final Map<UUID, BaseTask> functionMap = new HashMap<>();
 
-    public FunctionEngine(int maxThreads, UUID localID) throws RemoteException {
+    public RmilEngine(UUID localID) throws RemoteException {
         super();
         this.localID = localID;
     }
@@ -56,8 +55,8 @@ public class FunctionEngine extends UnicastRemoteObject implements RemoteExecuto
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         if (!super.equals(o)) return false;
-        FunctionEngine engine = (FunctionEngine) o;
-        return localID.equals(engine.localID);
+        RmilEngine rmilEngine = (RmilEngine) o;
+        return localID.equals(rmilEngine.localID);
     }
 
     @Override

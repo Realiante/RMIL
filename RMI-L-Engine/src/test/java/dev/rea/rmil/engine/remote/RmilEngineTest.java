@@ -1,5 +1,6 @@
-package dev.rea.rmil.container.remote;
+package dev.rea.rmil.engine.remote;
 
+import dev.rea.rmil.engine.RmilEngine;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -10,26 +11,26 @@ import java.rmi.RemoteException;
 import java.util.UUID;
 import java.util.function.Predicate;
 
-class FunctionEngineTest {
+class RmilEngineTest {
 
-    private static FunctionEngine engine;
+    private static RmilEngine rmilEngine;
     private static UUID predicateUUID;
 
     @BeforeAll
     static void setup() throws RemoteException {
-        engine = new FunctionEngine(2, UUID.randomUUID());
+        rmilEngine = new RmilEngine(UUID.randomUUID());
 
         predicateUUID = UUID.randomUUID();
         Predicate<Integer> predicate = integer -> integer > 1;
         DistTask<Integer, Boolean> predicateFunction = predicate::test;
-        engine.registerFunction(new FunctionPackage(predicateUUID, predicateFunction), false);
+        rmilEngine.registerFunction(new FunctionPackage(predicateUUID, predicateFunction), false);
 
     }
 
     @Test
     void testPredicateExecution() {
-        var result1 = engine.executeTask(predicateUUID, 2);
-        var result2 = engine.executeTask(predicateUUID, 0);
+        var result1 = rmilEngine.executeTask(predicateUUID, 2);
+        var result2 = rmilEngine.executeTask(predicateUUID, 0);
 
         Assertions.assertTrue(result1 instanceof Boolean);
         Assertions.assertTrue((Boolean) result1);

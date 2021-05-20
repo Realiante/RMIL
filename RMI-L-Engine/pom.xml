@@ -22,6 +22,7 @@
             <groupId>dev.rea</groupId>
             <artifactId>rmil.remote</artifactId>
             <version>0.1-SNAPSHOT</version>
+            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>

@@ -49,7 +49,7 @@
     <modules>
         <module>Remote</module>
         <module>RMI-L-Client</module>
-        <module>RMI-L-Container</module>
+        <module>RMI-L-Engine</module>
     </modules>
 
     <build>
