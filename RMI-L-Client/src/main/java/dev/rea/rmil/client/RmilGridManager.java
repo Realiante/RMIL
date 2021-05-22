@@ -2,7 +2,7 @@ package dev.rea.rmil.client;
 
 import java.util.function.Predicate;
 
-public interface DistributionManager {
+public interface RmilGridManager {
 
     <T> Predicate<? super T> filterTask(Predicate<? super T> predicate);
 

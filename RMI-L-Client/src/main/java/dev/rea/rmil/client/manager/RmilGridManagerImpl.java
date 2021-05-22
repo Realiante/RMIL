@@ -1,8 +1,8 @@
 package dev.rea.rmil.client.manager;
 
-import dev.rea.rmil.client.DistributionManager;
 import dev.rea.rmil.client.DistributionTactic;
 import dev.rea.rmil.client.RmilConfig;
+import dev.rea.rmil.client.RmilGridManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rea.dev.rmil.remote.BaseTask;
@@ -20,9 +20,9 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 
-public class DistributionManagerImpl implements DistributionManager {
+public class RmilGridManagerImpl implements RmilGridManager {
 
-    private static final Logger logger = LoggerFactory.getLogger(DistributionManagerImpl.class);
+    private static final Logger logger = LoggerFactory.getLogger(RmilGridManagerImpl.class);
 
     private final Map<UUID, BaseTask> functionMap = new ConcurrentHashMap<>();
     private final Map<UUID, RemoteServer> serverMap = new ConcurrentHashMap<>();
@@ -36,7 +36,7 @@ public class DistributionManagerImpl implements DistributionManager {
 
     private Set<UUID> taskAvailableServers;
 
-    public DistributionManagerImpl(RmilConfig config, DistributionTactic tactic) {
+    public RmilGridManagerImpl(RmilConfig config, DistributionTactic tactic) {
         this.distTactic = tactic;
         this.config = config;
         this.localCounter = new AtomicInteger(0);

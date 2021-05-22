@@ -1,32 +1,32 @@
 package dev.rea.rmil.client;
 
-import dev.rea.rmil.client.manager.DistributionManagerImpl;
+import dev.rea.rmil.client.manager.RmilGridManagerImpl;
 
 public class RmilClient {
 
-    private static DistributionManagerImpl manager;
+    private static RmilGridManagerImpl manager;
 
     private RmilClient() {
         //static class
     }
 
-    public static DistributionManager getManager() {
+    public static RmilGridManager getManager() {
         return manager;
     }
 
-    public static DistributionManager createLocalOnlyManager() {
+    public static RmilGridManager createLocalOnlyManager() {
         return createManager(new RmilConfig(), DistributionTactic.LOCAL_ONLY);
     }
 
-    public static DistributionManager createManager() {
+    public static RmilGridManager createManager() {
         return createManager(new RmilConfig(), DistributionTactic.STANDARD);
     }
 
-    public static DistributionManager createManager(RmilConfig config, DistributionTactic tactic) {
+    public static RmilGridManager createManager(RmilConfig config, DistributionTactic tactic) {
         if (manager != null) {
             return manager;
         }
-        return new DistributionManagerImpl(config, tactic);
+        return new RmilGridManagerImpl(config, tactic);
     }
 
     public static void fullStop() {

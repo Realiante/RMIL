@@ -1,9 +1,9 @@
 package dev.rea.rmil.client.manager;
 
-import dev.rea.rmil.client.DistributionManager;
 import dev.rea.rmil.client.DistributionTactic;
 import dev.rea.rmil.client.RmilConfig;
-import dev.rea.rmil.client.manager.DistributionManagerImpl.FunctionTask;
+import dev.rea.rmil.client.RmilGridManager;
+import dev.rea.rmil.client.manager.RmilGridManagerImpl.FunctionTask;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -29,7 +29,7 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.params.provider.Arguments.of;
 import static org.mockito.Mockito.*;
 
-class DistributedManagerTest {
+class RmilGridManagerTest {
 
     static RemoteServer remoteServer1;
     static RemoteServer remoteServer2;
@@ -80,7 +80,7 @@ class DistributedManagerTest {
             return arg > 1;
         };
 
-        DistributionManager dm = new DistributionManagerImpl(new RmilConfig(), DistributionTactic.LOCAL_ONLY);
+        RmilGridManager dm = new RmilGridManagerImpl(new RmilConfig(), DistributionTactic.LOCAL_ONLY);
         Set<Integer> filteredSet = new HashSet<>();
         Assertions.assertTimeoutPreemptively(Duration.ofSeconds(timeOut), () -> {
             filteredSet.addAll(testSet.stream().parallel()
@@ -105,7 +105,7 @@ class DistributedManagerTest {
             return arg > 1;
         };
 
-        DistributionManagerImpl dm = mock(DistributionManagerImpl.class,
+        RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
                 withSettings().useConstructor("test", 1, config, DistributionTactic.STANDARD));
         when(dm.getAvailableServers()).thenReturn(Set.of());
         when(dm.filterTask(predicate)).thenCallRealMethod();
@@ -144,7 +144,7 @@ class DistributedManagerTest {
             return arg > 1;
         };
 
-        DistributionManagerImpl dm = mock(DistributionManagerImpl.class,
+        RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
                 withSettings().useConstructor("test", 1, config, DistributionTactic.STANDARD));
         when(dm.getAvailableServers()).thenReturn(Set.of());
         when(dm.filterTask(predicate)).thenCallRealMethod();
@@ -180,7 +180,7 @@ class DistributedManagerTest {
             return arg > 1;
         };
 
-        DistributionManagerImpl dm = mock(DistributionManagerImpl.class,
+        RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
                 withSettings().useConstructor("test", 1, config, DistributionTactic.STANDARD));
         when(dm.getAvailableServers()).thenReturn(Set.of(remoteServer1, remoteServer2, remoteServer3));
         when(dm.filterTask(predicate)).thenCallRealMethod();
@@ -223,7 +223,7 @@ class DistributedManagerTest {
             return arg > 1;
         };
 
-        DistributionManagerImpl dm = mock(DistributionManagerImpl.class,
+        RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
                 withSettings().useConstructor("test", 1, config, DistributionTactic.STANDARD));
         when(dm.getAvailableServers()).thenReturn(Set.of());
         when(dm.filterTask(predicate)).thenCallRealMethod();
@@ -259,7 +259,7 @@ class DistributedManagerTest {
         config.setMaxLocalTasks(4);
 
         Predicate<Integer> predicate = arg -> arg > 1;
-        DistributionManagerImpl dm = mock(DistributionManagerImpl.class,
+        RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
                 withSettings().useConstructor("test", 1, config, DistributionTactic.STANDARD));
         when(dm.getAvailableServers()).thenReturn(Set.of(remoteServer1, remoteServer2, remoteServer3));
         when(dm.filterTask(predicate)).thenCallRealMethod();
@@ -293,7 +293,7 @@ class DistributedManagerTest {
         config.setMaxLocalTasks(4);
 
         Predicate<Integer> predicate = arg -> arg > 1;
-        DistributionManagerImpl dm = mock(DistributionManagerImpl.class,
+        RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
                 withSettings().useConstructor("test", 1, config, DistributionTactic.STANDARD));
         when(dm.getAvailableServers()).thenReturn(Set.of(remoteServer1, remoteServer2, remoteServer3));
         when(dm.filterTask(predicate)).thenCallRealMethod();
