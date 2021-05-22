@@ -5,7 +5,6 @@ import dev.rea.rmil.client.DistributionTactic;
 import dev.rea.rmil.client.RmilConfig;
 import rea.dev.rmil.remote.BaseTask;
 import rea.dev.rmil.remote.DistTask;
-import rea.dev.rmil.remote.items.DistributedTransfer;
 import rea.dev.rmil.remote.items.FunctionPackage;
 
 import java.rmi.RemoteException;
@@ -25,9 +24,7 @@ public class DistributionManagerImpl implements DistributionManager {
     private final RmilConfig config;
     private final AtomicInteger localCounter;
 
-    private final Map<UUID, DistributionQueue<?>> functionQueueMap = new ConcurrentHashMap<>();
     private final Map<UUID, BaseTask> functionMap = new ConcurrentHashMap<>();
-
     private final Map<UUID, RemoteServer> serverMap = new ConcurrentHashMap<>();
     private final Set<RemoteServer> availableServers = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Set<UUID> unavailableServers = Collections.newSetFromMap(new ConcurrentHashMap<>());
@@ -35,7 +32,7 @@ public class DistributionManagerImpl implements DistributionManager {
     private final Deque<ServerAvailabilityListener> listenerQueue = new ConcurrentLinkedDeque<>();
     private Set<UUID> taskAvailableServers;
 
-    public DistributionManagerImpl(String address, int port, RmilConfig config, DistributionTactic tactic) {
+    public DistributionManagerImpl(RmilConfig config, DistributionTactic tactic) {
         this.distTactic = tactic;
         this.config = config;
         this.localCounter = new AtomicInteger(0);
@@ -188,12 +185,6 @@ public class DistributionManagerImpl implements DistributionManager {
             throw new IllegalStateException(e);
         }
         return functionTask.returnValueRef.get();
-    }
-
-    protected synchronized <T> void registerQueue(UUID functionID, T argument) {
-        final DistributionQueue<T> queue = new DistributionQueue<>();
-        functionQueueMap.put(functionID, queue);
-        queue.put(new DistributedTransfer<>(argument));
     }
 
     public void stop() {

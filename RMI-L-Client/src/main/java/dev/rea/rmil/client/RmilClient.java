@@ -15,18 +15,18 @@ public class RmilClient {
     }
 
     public static DistributionManager createLocalOnlyManager() {
-        return createManager("localhost", 51199, new RmilConfig(), DistributionTactic.LOCAL_ONLY);
+        return createManager(new RmilConfig(), DistributionTactic.LOCAL_ONLY);
     }
 
-    public static DistributionManager createManager(String address) {
-        return createManager(address, 51199, new RmilConfig(), DistributionTactic.STANDARD);
+    public static DistributionManager createManager() {
+        return createManager(new RmilConfig(), DistributionTactic.STANDARD);
     }
 
-    public static DistributionManager createManager(String address, int port, RmilConfig config, DistributionTactic tactic) {
+    public static DistributionManager createManager(RmilConfig config, DistributionTactic tactic) {
         if (manager != null) {
             return manager;
         }
-        return new DistributionManagerImpl(address, port, config, tactic);
+        return new DistributionManagerImpl(config, tactic);
     }
 
     public static void fullStop() {
