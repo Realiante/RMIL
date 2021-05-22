@@ -21,6 +21,13 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>
+                        --add-opens rmil.engine/dev.rea.rmil.engine.backend=ALL-UNNAMED
+                        --illegal-access=permit
+                        -Xmx1g
+                    </argLine>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
