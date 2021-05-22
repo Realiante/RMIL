@@ -2,7 +2,7 @@ package dev.rea.rmil.client.manager;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import rea.dev.rmil.remote.RemoteExecutorContainer;
+import rea.dev.rmil.remote.RemoteEngine;
 
 import java.nio.charset.StandardCharsets;
 import java.rmi.NotBoundException;
@@ -19,7 +19,7 @@ public class RemoteServer {
     private final int port;
 
     private boolean loaded = false;
-    private RemoteExecutorContainer executorContainer;
+    private RemoteEngine executorContainer;
 
     public RemoteServer(String address, int port) {
         this.address = address;
@@ -31,7 +31,7 @@ public class RemoteServer {
     public boolean attemptLoad() {
         try {
             var registry = LocateRegistry.getRegistry(address, port);
-            this.executorContainer = (RemoteExecutorContainer) registry.lookup("engine");
+            this.executorContainer = (RemoteEngine) registry.lookup("engine");
             this.loaded = true;
         } catch (RemoteException | NotBoundException exception) {
             var serverName = String.format("%s:%s", address, port);
@@ -49,7 +49,7 @@ public class RemoteServer {
         return loaded;
     }
 
-    public RemoteExecutorContainer getExecutorContainer() {
+    public RemoteEngine getExecutorContainer() {
         return executorContainer;
     }
 

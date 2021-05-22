@@ -9,11 +9,11 @@
         <version>0.1-SNAPSHOT</version>
     </parent>
 
-    <artifactId>rmil.client</artifactId>
+    <artifactId>rmil.engine</artifactId>
     <packaging>jar</packaging>
 
-    <name>RMI-L Client</name>
-    <description>Allows easy distribution of functions and items to remote RMI-L containers</description>
+    <name>RMI-L Engine</name>
+    <description>Computational engine</description>
     <url>//todo//</url>
 
     <build>
@@ -23,7 +23,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>
-                        --add-opens rmil.client/dev.rea.rmil.client.manager=ALL-UNNAMED
+                        --add-opens rmil.engine/dev.rea.rmil.engine.backend=ALL-UNNAMED
                         --illegal-access=permit
                         -Xmx1g
                     </argLine>
@@ -49,11 +49,7 @@
             <groupId>dev.rea</groupId>
             <artifactId>rmil.remote</artifactId>
             <version>0.1-SNAPSHOT</version>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
+            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
@@ -62,6 +58,11 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>

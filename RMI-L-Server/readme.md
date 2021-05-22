@@ -1,3 +1,0 @@
-#RMI-L Server
-
-//todo
