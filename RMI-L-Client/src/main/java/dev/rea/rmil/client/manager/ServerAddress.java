@@ -1,6 +1,6 @@
 package dev.rea.rmil.client.manager;
 
-public final class ServerAddress {
+class ServerAddress {
     private final String address;
     private final int port;
 

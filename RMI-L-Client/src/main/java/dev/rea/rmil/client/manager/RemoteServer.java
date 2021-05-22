@@ -11,7 +11,7 @@ import java.rmi.registry.LocateRegistry;
 import java.util.Objects;
 import java.util.UUID;
 
-public class RemoteServer {
+class RemoteServer {
 
     public final UUID serverID;
     private final Logger logger = LoggerFactory.getLogger(RemoteServer.class);

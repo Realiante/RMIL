@@ -1,7 +1,5 @@
 package dev.rea.rmil.client.manager;
 
-import dev.rea.rmil.client.DistributionTactic;
-import dev.rea.rmil.client.RmilConfig;
 import dev.rea.rmil.client.RmilGridManager;
 import dev.rea.rmil.client.manager.RmilGridManagerImpl.FunctionTask;
 import org.junit.jupiter.api.Assertions;
@@ -66,39 +64,14 @@ class RmilGridManagerTest {
         when(remoteServer3.attemptLoad()).thenReturn(true);
     }
 
-    @ParameterizedTest
-    @MethodSource("sleepTimeSource")
-    @Timeout(value = 60)
-    void localOnlyPredicateTest(int sleepTime, TimeUnit timeUnit, int timeOut) {
-        var testSet = Set.of(0, 14, 55, -2, 4, -717, 15, -11, 3, 1);
-        Predicate<Integer> predicate = arg -> {
-            try {
-                timeUnit.sleep(sleepTime);
-            } catch (InterruptedException e) {
-                Assertions.fail(e);
-            }
-            return arg > 1;
-        };
-
-        RmilGridManager dm = new RmilGridManagerImpl(new RmilConfig(), DistributionTactic.LOCAL_ONLY);
-        Set<Integer> filteredSet = new HashSet<>();
-        Assertions.assertTimeoutPreemptively(Duration.ofSeconds(timeOut), () -> {
-            filteredSet.addAll(testSet.stream().parallel()
-                    .filter(dm.filterTask(predicate)).collect(Collectors.toSet()));
-        });
-
-        Assertions.assertEquals(5, filteredSet.size());
-        Assertions.assertEquals(Set.of(14, 55, 4, 15, 3), filteredSet);
-    }
-
     @Test
     @Timeout(value = 60)
     @SuppressWarnings("unchecked")
     void remotePredicateRemoteConditionReached() {
         var testSet = Set.of(0, 14, 55, -2, 4, -717, 15, -11, 3, 1);
         AtomicBoolean pauseCondition = new AtomicBoolean(false);
-        RmilConfig config = new RmilConfig();
-        config.setMaxLocalTasks(1);
+        RmilGridManager gridManager = GridBuilder.buildGrid();
+        gridManager.setMaxLocalTasks(1);
 
         Predicate<Integer> predicate = arg -> {
             await("Local-Waiting").untilTrue(pauseCondition);
@@ -106,8 +79,8 @@ class RmilGridManagerTest {
         };
 
         RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
-                withSettings().useConstructor("test", 1, config, DistributionTactic.STANDARD));
-        when(dm.getAvailableServers()).thenReturn(Set.of());
+                withSettings().useConstructor(3, Set.of()));
+        when(dm.getAvailableServers(anySet())).thenReturn(Set.of());
         when(dm.filterTask(predicate)).thenCallRealMethod();
         when(dm.registerFunctionTask(any())).thenCallRealMethod();
         when(dm.sendFunctionAndReturnUnavailable(any())).thenReturn(Set.of());
@@ -132,8 +105,6 @@ class RmilGridManagerTest {
     @Timeout(value = 60)
     void remotePredicateTest(int sleepTime, TimeUnit timeUnit, int timeOut) {
         var testSet = Set.of(0, 14, 55, -2, 4, -717, 15, -11, 3, 1);
-        RmilConfig config = new RmilConfig();
-        config.setMaxLocalTasks(1);
 
         Predicate<Integer> predicate = arg -> {
             try {
@@ -145,8 +116,8 @@ class RmilGridManagerTest {
         };
 
         RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
-                withSettings().useConstructor("test", 1, config, DistributionTactic.STANDARD));
-        when(dm.getAvailableServers()).thenReturn(Set.of());
+                withSettings().useConstructor(4, Set.of()));
+        when(dm.getAvailableServers(anySet())).thenReturn(Set.of());
         when(dm.filterTask(predicate)).thenCallRealMethod();
         when(dm.registerFunctionTask(any())).thenCallRealMethod();
         when(dm.sendFunctionAndReturnUnavailable(any())).thenReturn(Set.of());
@@ -166,10 +137,8 @@ class RmilGridManagerTest {
     @ParameterizedTest
     @MethodSource("sleepTimeSource")
     @Timeout(value = 60)
-    void remotePredicateTest_RemoteExecutionMock(int sleepTime, TimeUnit timeUnit, int timeOut) {
+    void remotePredicateTest_RemoteExecutionMockOnly(int sleepTime, TimeUnit timeUnit, int timeOut) {
         var testSet = Set.of(0, 14, 55, -2, 4, -717, 15, -11, 3, 1);
-        RmilConfig config = new RmilConfig();
-        config.setMaxLocalTasks(1);
 
         Predicate<Integer> predicate = arg -> {
             try {
@@ -181,8 +150,8 @@ class RmilGridManagerTest {
         };
 
         RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
-                withSettings().useConstructor("test", 1, config, DistributionTactic.STANDARD));
-        when(dm.getAvailableServers()).thenReturn(Set.of(remoteServer1, remoteServer2, remoteServer3));
+                withSettings().useConstructor(0, Set.of()));
+        when(dm.getAvailableServers(anySet())).thenReturn(Set.of(remoteServer1, remoteServer2, remoteServer3));
         when(dm.filterTask(predicate)).thenCallRealMethod();
         when(dm.registerFunctionTask(any())).thenCallRealMethod();
         when(dm.sendFunctionAndReturnUnavailable(any())).thenReturn(Set.of());
@@ -210,9 +179,6 @@ class RmilGridManagerTest {
     @Timeout(value = 60)
     void remotePredicateTest_CustomForkJoinPool(int sleepTime, TimeUnit timeUnit, int timeOut) {
         var testSet = Set.of(0, 14, 55, -2, 4, -717, 15, -11, 3, 1);
-        AtomicBoolean pauseCondition = new AtomicBoolean(false);
-        RmilConfig config = new RmilConfig();
-        config.setMaxLocalTasks(1);
 
         Predicate<Integer> predicate = arg -> {
             try {
@@ -224,8 +190,8 @@ class RmilGridManagerTest {
         };
 
         RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
-                withSettings().useConstructor("test", 1, config, DistributionTactic.STANDARD));
-        when(dm.getAvailableServers()).thenReturn(Set.of());
+                withSettings().useConstructor(4, Set.of()));
+        when(dm.getAvailableServers(anySet())).thenReturn(Set.of());
         when(dm.filterTask(predicate)).thenCallRealMethod();
         when(dm.registerFunctionTask(any())).thenCallRealMethod();
         when(dm.sendFunctionAndReturnUnavailable(any())).thenReturn(Set.of());
@@ -255,13 +221,10 @@ class RmilGridManagerTest {
         var testSet = IntStream.rangeClosed(-9000, 191000)
                 .boxed().collect(Collectors.toSet());
 
-        RmilConfig config = new RmilConfig();
-        config.setMaxLocalTasks(4);
-
         Predicate<Integer> predicate = arg -> arg > 1;
         RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
-                withSettings().useConstructor("test", 1, config, DistributionTactic.STANDARD));
-        when(dm.getAvailableServers()).thenReturn(Set.of(remoteServer1, remoteServer2, remoteServer3));
+                withSettings().useConstructor(4, Set.of()));
+        when(dm.getAvailableServers(anySet())).thenReturn(Set.of(remoteServer1, remoteServer2, remoteServer3));
         when(dm.filterTask(predicate)).thenCallRealMethod();
         when(dm.registerFunctionTask(any())).thenCallRealMethod();
         when(dm.sendFunctionAndReturnUnavailable(any())).thenReturn(Set.of());
@@ -289,13 +252,10 @@ class RmilGridManagerTest {
         var testSet = IntStream.rangeClosed(-9000, 191000)
                 .boxed().collect(Collectors.toSet());
 
-        RmilConfig config = new RmilConfig();
-        config.setMaxLocalTasks(4);
-
         Predicate<Integer> predicate = arg -> arg > 1;
         RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
-                withSettings().useConstructor("test", 1, config, DistributionTactic.STANDARD));
-        when(dm.getAvailableServers()).thenReturn(Set.of(remoteServer1, remoteServer2, remoteServer3));
+                withSettings().useConstructor(4, Set.of()));
+        when(dm.getAvailableServers(anySet())).thenReturn(Set.of(remoteServer1, remoteServer2, remoteServer3));
         when(dm.filterTask(predicate)).thenCallRealMethod();
         when(dm.registerFunctionTask(any())).thenCallRealMethod();
         when(dm.sendFunctionAndReturnUnavailable(any())).thenReturn(Set.of());

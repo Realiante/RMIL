@@ -1,7 +1,5 @@
 package dev.rea.rmil.client.manager;
 
-import dev.rea.rmil.client.DistributionTactic;
-import dev.rea.rmil.client.RmilConfig;
 import dev.rea.rmil.client.RmilGridManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +18,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 
-public class RmilGridManagerImpl implements RmilGridManager {
+class RmilGridManagerImpl implements RmilGridManager {
 
     private static final Logger logger = LoggerFactory.getLogger(RmilGridManagerImpl.class);
 
@@ -29,37 +27,31 @@ public class RmilGridManagerImpl implements RmilGridManager {
     private final Set<RemoteServer> availableServers = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Set<UUID> unavailableServers = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Deque<ServerAvailabilityListener> listenerQueue = new ConcurrentLinkedDeque<>();
-
-    private final DistributionTactic distTactic;
-    private final RmilConfig config;
     private final AtomicInteger localCounter;
 
-    private Set<UUID> taskAvailableServers;
+    private final Set<UUID> taskAvailableServers;
+    private int maxLocalTasks;
 
-    public RmilGridManagerImpl(RmilConfig config, DistributionTactic tactic) {
-        this.distTactic = tactic;
-        this.config = config;
+    public RmilGridManagerImpl(int maxLocalTasks, Set<ServerAddress> addresses) {
+        this.maxLocalTasks = maxLocalTasks;
         this.localCounter = new AtomicInteger(0);
 
-        if (distTactic != DistributionTactic.LOCAL_ONLY) {
-            availableServers.addAll(getAvailableServers());
-            taskAvailableServers = new HashSet<>() {
-                @Override
-                public boolean add(UUID uuid) {
-                    if (!listenerQueue.isEmpty()) {
-                        var listener = listenerQueue.pop();
-                        listener.onAvailable(uuid);
-                        return true;
-                    }
-                    return super.add(uuid);
+        availableServers.addAll(getAvailableServers(addresses));
+        taskAvailableServers = new HashSet<>() {
+            @Override
+            public boolean add(UUID uuid) {
+                if (!listenerQueue.isEmpty()) {
+                    var listener = listenerQueue.pop();
+                    listener.onAvailable(uuid);
+                    return true;
                 }
-            };
-        }
+                return super.add(uuid);
+            }
+        };
+
     }
 
-    protected Set<RemoteServer> getAvailableServers() {
-        //todo: create a mechanism to get a set of all server addresses and remove this test set
-        Set<ServerAddress> addresses = Set.of(new ServerAddress("localhost", 51199));
+    protected Set<RemoteServer> getAvailableServers(Set<ServerAddress> addresses) {
         return addresses.stream().map(servAddr -> {
             var server = new RemoteServer(servAddr.getAddress(), servAddr.getPort());
             serverMap.put(server.serverID, server);
@@ -75,23 +67,25 @@ public class RmilGridManagerImpl implements RmilGridManager {
         //todo: create a mechanism that pings unavailable servers occasionally
     }
 
+    @Override
+    public void setMaxLocalTasks(int max) {
+        this.maxLocalTasks = max;
+    }
+
     public <T> Predicate<? super T> filterTask(Predicate<? super T> predicate) {
         //todo: add mechanism of recognizing existing functions
         DistTask<? super T, Boolean> ttDistPredicate = predicate::test;
         var functionID = registerFunctionTask(ttDistPredicate);
 
         return (Predicate<T>) argument -> {
-            if (distTactic == DistributionTactic.STANDARD) {
-                if (localCounter.incrementAndGet() < config.getMaxLocalTasks()) {
-                    var result = ttDistPredicate.execute(argument);
-                    executeWaitingFunctions(null);
-                    localCounter.decrementAndGet();
-                    return result;
-                }
+            if (localCounter.incrementAndGet() < maxLocalTasks) {
+                var result = ttDistPredicate.execute(argument);
+                executeWaitingFunctions(null);
                 localCounter.decrementAndGet();
-                return executeFunctionTask(new FunctionTask<T, Boolean>(functionID, argument));
+                return result;
             }
-            return ttDistPredicate.execute(argument);
+            localCounter.decrementAndGet();
+            return executeFunctionTask(new FunctionTask<T, Boolean>(functionID, argument));
         };
     }
 
@@ -177,7 +171,7 @@ public class RmilGridManagerImpl implements RmilGridManager {
     protected <T, R> R executeTaskServerUnavailable(FunctionTask<T, R> functionTask) {
         try {
             //Awaits listener execution
-            if (localCounter.get() <= config.getMaxLocalTasks()) {
+            if (localCounter.get() <= maxLocalTasks) {
                 localCounter.incrementAndGet();
                 executeWaitingFunctions(null);
                 localCounter.decrementAndGet();
