@@ -3,6 +3,8 @@ package dev.rea.rmil.client.manager;
 import dev.rea.rmil.client.DistributionManager;
 import dev.rea.rmil.client.DistributionTactic;
 import dev.rea.rmil.client.RmilConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import rea.dev.rmil.remote.BaseTask;
 import rea.dev.rmil.remote.DistTask;
 import rea.dev.rmil.remote.items.FunctionPackage;
@@ -20,16 +22,18 @@ import java.util.stream.Collectors;
 
 public class DistributionManagerImpl implements DistributionManager {
 
-    private final DistributionTactic distTactic;
-    private final RmilConfig config;
-    private final AtomicInteger localCounter;
+    private static final Logger logger = LoggerFactory.getLogger(DistributionManagerImpl.class);
 
     private final Map<UUID, BaseTask> functionMap = new ConcurrentHashMap<>();
     private final Map<UUID, RemoteServer> serverMap = new ConcurrentHashMap<>();
     private final Set<RemoteServer> availableServers = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Set<UUID> unavailableServers = Collections.newSetFromMap(new ConcurrentHashMap<>());
-
     private final Deque<ServerAvailabilityListener> listenerQueue = new ConcurrentLinkedDeque<>();
+
+    private final DistributionTactic distTactic;
+    private final RmilConfig config;
+    private final AtomicInteger localCounter;
+
     private Set<UUID> taskAvailableServers;
 
     public DistributionManagerImpl(RmilConfig config, DistributionTactic tactic) {
@@ -127,8 +131,7 @@ public class DistributionManagerImpl implements DistributionManager {
                 remoteServer.getExecutorContainer()
                         .registerFunction(functionPackage, false);
             } catch (RemoteException e) {
-                //todo: log server is unavailable
-                e.printStackTrace();
+                logger.error("Remote exception while attempting to send a function to " + remoteServer.getAddress(), e);
                 var sID = remoteServer.serverID;
                 unavailableServers.add(sID);
                 upForRemoval.add(remoteServer);
@@ -145,8 +148,8 @@ public class DistributionManagerImpl implements DistributionManager {
                             functionTask.returnValueRef.set(executeTaskOnServer(uuid,
                                     functionTask.functionID, functionTask.argument));
                         } catch (RemoteException e) {
-                            //todo: log server is unavailable
-                            e.printStackTrace();
+                            logger.error("Remote exception while attempting to execute a task on "
+                                    + serverMap.get(uuid).getAddress(), e);
                             //todo: add retry mechanism
                             availableServers.remove(serverMap.get(uuid));
                             functionTask.listen();
@@ -221,8 +224,7 @@ public class DistributionManagerImpl implements DistributionManager {
                         returnValueRef.set(executeTaskOnServer(server, functionID, argument));
                     }
                 } catch (Exception e) {
-                    //todo: log this
-                    e.printStackTrace();
+                    logger.error("Critical exception while attempting execute task for a waiting thread", e);
                 } finally {
                     countDown.countDown();
                 }
