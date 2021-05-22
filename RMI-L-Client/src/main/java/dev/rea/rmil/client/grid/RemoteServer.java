@@ -1,4 +1,4 @@
-package dev.rea.rmil.client.manager;
+package dev.rea.rmil.client.grid;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

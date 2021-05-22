@@ -1,7 +1,7 @@
-package dev.rea.rmil.client.manager;
+package dev.rea.rmil.client.grid;
 
 import dev.rea.rmil.client.RmilGridManager;
-import dev.rea.rmil.client.manager.RmilGridManagerImpl.FunctionTask;
+import dev.rea.rmil.client.grid.RmilGridManagerImpl.FunctionTask;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;

@@ -1,10 +1,11 @@
-package dev.rea.rmil.client.manager;
+package dev.rea.rmil.client.grid;
 
 import dev.rea.rmil.client.RmilGridManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rea.dev.rmil.remote.BaseTask;
 import rea.dev.rmil.remote.DistTask;
+import rea.dev.rmil.remote.items.DistributedItem;
 import rea.dev.rmil.remote.items.FunctionPackage;
 
 import java.rmi.RemoteException;
@@ -73,7 +74,6 @@ class RmilGridManagerImpl implements RmilGridManager {
     }
 
     public <T> Predicate<? super T> filterTask(Predicate<? super T> predicate) {
-        //todo: add mechanism of recognizing existing functions
         DistTask<? super T, Boolean> ttDistPredicate = predicate::test;
         var functionID = registerFunctionTask(ttDistPredicate);
 
@@ -87,6 +87,11 @@ class RmilGridManagerImpl implements RmilGridManager {
             localCounter.decrementAndGet();
             return executeFunctionTask(new FunctionTask<T, Boolean>(functionID, argument));
         };
+    }
+
+    @Override
+    public <T> Predicate<DistributedItem<T>> gridPredicate(Predicate<T> predicate) {
+        return null;
     }
 
     private void executeWaitingFunctions(UUID serverID) {

@@ -1,4 +1,4 @@
-package dev.rea.rmil.client.manager;
+package dev.rea.rmil.client.grid;
 
 class ServerAddress {
     private final String address;
