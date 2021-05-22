@@ -6,9 +6,6 @@ import org.junit.jupiter.api.Test;
 import rea.dev.rmil.remote.DistTask;
 import rea.dev.rmil.remote.items.FunctionPackage;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.rmi.RemoteException;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -18,12 +15,8 @@ class RmilRemoteEngineTest {
     private static UUID predicateUUID;
 
     @BeforeAll
-    static void setup() throws RemoteException {
-        try {
-            rmilRemoteEngine = new RmilRemoteEngine(String.format("%s:%s", InetAddress.getLocalHost().getHostAddress(), 0));
-        } catch (UnknownHostException e) {
-            Assertions.fail(e);
-        }
+    static void setup() {
+        rmilRemoteEngine = new RmilRemoteEngine();
 
         predicateUUID = UUID.randomUUID();
         Predicate<Integer> predicate = integer -> integer > 1;
