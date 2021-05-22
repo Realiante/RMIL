@@ -80,8 +80,7 @@ class DistributedManagerTest {
             return arg > 1;
         };
 
-        DistributionManager dm = new DistributionManagerImpl("test", 0,
-                new RmilConfig(), DistributionTactic.LOCAL_ONLY);
+        DistributionManager dm = new DistributionManagerImpl(new RmilConfig(), DistributionTactic.LOCAL_ONLY);
         Set<Integer> filteredSet = new HashSet<>();
         Assertions.assertTimeoutPreemptively(Duration.ofSeconds(timeOut), () -> {
             filteredSet.addAll(testSet.stream().parallel()
