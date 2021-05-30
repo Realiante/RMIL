@@ -11,17 +11,27 @@ import java.util.concurrent.FutureTask;
 public final class DistributedItemFuture<T> implements DistributedItem<T> {
 
     private final UUID itemID;
-    private final UUID nodeID;
     private final Future<T> itemFuture;
+    private UUID nodeID;
+    private T nativeItem;
 
     public DistributedItemFuture(UUID itemID, UUID nodeID, ItemFetcher fetcher) {
+        this(itemID, nodeID, null, fetcher);
+    }
+
+    public DistributedItemFuture(UUID itemID, UUID nodeID, T item, ItemFetcher fetcher) {
         this.itemID = itemID;
         this.nodeID = nodeID;
         this.itemFuture = new FutureTask<>(() -> fetcher.getItem(nodeID, itemID));
+        this.nativeItem = item;
     }
 
     @Override
     public T getItem() {
+        if (nativeItem != null) {
+            return nativeItem;
+        }
+
         try {
             return itemFuture.get();
         } catch (InterruptedException | ExecutionException e) {
@@ -38,6 +48,25 @@ public final class DistributedItemFuture<T> implements DistributedItem<T> {
     @Override
     public UUID getNodeID() {
         return nodeID;
+    }
+
+    public void setNodeID(UUID nodeID) {
+        if (this.nodeID == null && nodeID != null) {
+            //this native item is no longer the latest version of the item
+            nativeItem = null;
+            this.nodeID = nodeID;
+        } else if (this.nodeID != null && nodeID != null) {
+            this.nodeID = nodeID;
+        } else if (this.nodeID != null) {
+            throw new IllegalArgumentException("Attempted to pass a null nodeID to a remote distributed future");
+        }
+    }
+
+    public void updateItem(T localItem) {
+        if (localItem == null) {
+            throw new NullPointerException();
+        }
+        this.nativeItem = localItem;
     }
 
     @Override
