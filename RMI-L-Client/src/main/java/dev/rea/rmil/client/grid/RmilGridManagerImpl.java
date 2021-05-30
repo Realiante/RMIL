@@ -18,6 +18,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -38,7 +39,11 @@ class RmilGridManagerImpl implements RmilGridManager {
     private final AtomicInteger localCounter;
 
 
+    private int retries = 1;
+    private long awaitTimeout = 60;
+    private TimeUnit awaitTimeunit = TimeUnit.SECONDS;
     private int maxLocalTasks;
+
 
     public RmilGridManagerImpl(int maxLocalTasks, Set<ServerAddress> addresses) {
         this.maxLocalTasks = maxLocalTasks;
@@ -73,12 +78,10 @@ class RmilGridManagerImpl implements RmilGridManager {
     }
 
     protected Set<RemoteServer> getAvailableServers(Set<ServerAddress> addresses) {
-        return addresses.stream().map(servAddr -> RemoteServer.load(servAddr.getAddress()))
+        return addresses.parallelStream().map(servAddr -> RemoteServer.load(servAddr.getAddress(), retries))
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .collect(Collectors.toSet());
-        //todo: create a mechanism of determining what servers are available after initial loading attempt
-        //todo: create a mechanism that pings unavailable servers occasionally
     }
 
     @Override
@@ -159,20 +162,28 @@ class RmilGridManagerImpl implements RmilGridManager {
     }
 
     protected <T, R> R checkItemFromLocal(CheckFromLocal<T, R> checkFromLocal) {
-        getNextThread().ifPresentOrElse(server -> {
+        getNextThread().ifPresentOrElse(remoteThread -> {
             if (checkFromLocal.removeListener()) {
-                try {
-                    checkFromLocal.returnValueRef.set(checkOnRemote(server,
-                            checkFromLocal.methodID, checkFromLocal.argumentPackage));
-                } catch (RemoteException e) {
-                    logger.error("Remote exception while attempting to execute a task on "
-                            + server.getAddress(), e);
-                    checkFromLocal.listen();
-                    checkFromLocal.returnValueRef.set(checkItemFromLocal(checkFromLocal));
-                }
+                tryCheckItemFromLocal(checkFromLocal, remoteThread, 0);
             }
         }, () -> checkFromLocal.returnValueRef.set(checkWhenAvailableFromLocal(checkFromLocal)));
         return checkFromLocal.returnValueRef.get();
+    }
+
+    protected <T, R> void tryCheckItemFromLocal(CheckFromLocal<T, R> checkFromLocal, RemoteThread remoteThread, int i) {
+        try {
+            checkFromLocal.returnValueRef.set(checkOnRemote(remoteThread,
+                    checkFromLocal.methodID, checkFromLocal.argumentPackage));
+        } catch (RemoteException e) {
+            logger.error(String.format("Remote exception while attempting to execute a task on %s " +
+                    ": tries left=%s", remoteThread.getAddress(), retries - i));
+            if (i < retries) {
+                tryCheckItemFromLocal(checkFromLocal, remoteThread, ++i);
+            } else {
+                checkFromLocal.listen();
+                checkFromLocal.returnValueRef.set(checkItemFromLocal(checkFromLocal));
+            }
+        }
     }
 
     private Optional<RemoteThread> getNextThread() {
@@ -215,7 +226,10 @@ class RmilGridManagerImpl implements RmilGridManager {
                 fireListeners(null);
                 localCounter.decrementAndGet();
             }
-            checkFromLocal.countDown.await();
+            if (!checkFromLocal.countDown.await(awaitTimeout, awaitTimeunit)) {
+                throw new InterruptedException(
+                        "An argument has timed out while awaiting a remote server or a local thread to compute it");
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
@@ -229,6 +243,17 @@ class RmilGridManagerImpl implements RmilGridManager {
 
     private <R> DistributedItemFuture<R> repackageItemFuture(UUID itemID, UUID nodeID) {
         return new DistributedItemFuture<>(itemID, nodeID, fetcher);
+    }
+
+    @Override
+    public void setAwaitTimeout(long timeout, TimeUnit timeUnit) {
+        this.awaitTimeout = timeout;
+        this.awaitTimeunit = timeUnit;
+    }
+
+    @Override
+    public void setRetry(int tries) {
+        this.retries = tries;
     }
 
     @FunctionalInterface

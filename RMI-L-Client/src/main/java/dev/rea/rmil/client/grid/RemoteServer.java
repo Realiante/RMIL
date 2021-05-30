@@ -24,16 +24,24 @@ class RemoteServer implements RemoteThread {
         this.address = address;
     }
 
-    public static Optional<RemoteServer> load(String address) {
+    public static Optional<RemoteServer> load(String address, int retries) {
+        return Optional.ofNullable(tryLoad(address, retries));
+    }
+
+    private static RemoteServer tryLoad(String address, int retries) {
         try {
             var server = new RemoteServer(address);
             server.loadContainer(address);
-            return Optional.of(server);
+            return server;
         } catch (RemoteException | NotBoundException exception) {
-            logger.debug("Failed to locate server " + address, exception);
-            logger.info(String.format("Server %s is not bound or access is not properly configured", address));
+            logger.info(String.format(
+                    "Connection to remote server %s has failed : retries = %s", address, retries), exception);
+            if (retries > 0) {
+                return tryLoad(address, --retries);
+            }
         }
-        return Optional.empty();
+        logger.error(String.format("Server %s is not bound or access is not properly configured", address));
+        return null;
     }
 
     protected ServerConfiguration loadConfiguration() throws RemoteException {
