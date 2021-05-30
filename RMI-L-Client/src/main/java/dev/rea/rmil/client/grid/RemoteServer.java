@@ -15,20 +15,19 @@ class RemoteServer implements RemoteThread {
 
     private static final Logger logger = LoggerFactory.getLogger(RemoteServer.class);
     private final String address;
-    private final Set<RemoteServerThread> additionalThreads;
+    private final Set<RemoteServerThread> additionalThreads = new HashSet<>();
     private UUID serverID;
     private RemoteEngine executorContainer;
     private Priority priority;
 
-    protected RemoteServer(String address) throws RemoteException, NotBoundException {
+    protected RemoteServer(String address) {
         this.address = address;
-        this.additionalThreads = new HashSet<>();
-        loadContainer(address);
     }
 
     public static Optional<RemoteServer> load(String address) {
         try {
             var server = new RemoteServer(address);
+            server.loadContainer(address);
             return Optional.of(server);
         } catch (RemoteException | NotBoundException exception) {
             logger.debug("Failed to locate server " + address, exception);
@@ -58,7 +57,7 @@ class RemoteServer implements RemoteThread {
     }
 
     public Set<RemoteServerThread> getAdditionalThreads() {
-        return additionalThreads;
+        return Set.copyOf(additionalThreads);
     }
 
     @Override

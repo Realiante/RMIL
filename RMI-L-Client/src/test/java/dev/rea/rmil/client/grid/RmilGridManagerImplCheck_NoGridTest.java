@@ -55,22 +55,19 @@ class RmilGridManagerImplCheck_NoGridTest {
     }
 
     @BeforeAll
-    static void setup(){
-        Assertions.assertDoesNotThrow(()->{
-            remoteServer = mock(RemoteServer.class);
+    static void setup() {
+        Assertions.assertDoesNotThrow(() -> {
+            remoteServer = mock(RemoteServer.class, withSettings().useConstructor("test"));
             when(remoteServer.loadConfiguration()).thenReturn(
                     new ServerConfiguration(UUID.randomUUID(), 2, ServerConfiguration.Priority.NORMAL));
-            doCallRealMethod().when(remoteServer).setConfiguration(any());
+            doNothing().when(remoteServer).loadContainer(any());
             remoteServer.setConfiguration(remoteServer.loadConfiguration());
 
-            remoteServerLow = mock(RemoteServer.class);
+            remoteServerLow = mock(RemoteServer.class, withSettings().useConstructor("testLow"));
             when(remoteServerLow.loadConfiguration()).thenReturn(
                     new ServerConfiguration(UUID.randomUUID(), 1, ServerConfiguration.Priority.LOW));
             doCallRealMethod().when(remoteServerLow).setConfiguration(any());
-            doAnswer(invocation -> {
-                remoteServerLow.setConfiguration(remoteServerLow.loadConfiguration());
-                return invocation;
-            }).when(remoteServerLow).loadContainer(any());
+            doNothing().when(remoteServerLow).loadContainer(any());
             remoteServerLow.setConfiguration(remoteServerLow.loadConfiguration());
         });
     }
