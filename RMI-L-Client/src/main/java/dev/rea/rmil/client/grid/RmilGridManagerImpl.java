@@ -1,12 +1,17 @@
 package dev.rea.rmil.client.grid;
 
+import dev.rea.rmil.client.DistributedItem;
 import dev.rea.rmil.client.RmilGridManager;
+import dev.rea.rmil.client.items.DistributedItemFuture;
+import dev.rea.rmil.client.items.DistributedItemLocal;
+import dev.rea.rmil.client.items.ItemFetcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import rea.dev.rmil.remote.BaseTask;
-import rea.dev.rmil.remote.DistTask;
-import rea.dev.rmil.remote.items.DistributedItem;
-import rea.dev.rmil.remote.items.FunctionPackage;
+import rea.dev.rmil.remote.ArgumentPackage;
+import rea.dev.rmil.remote.DistributedMethod;
+import rea.dev.rmil.remote.DistributedMethod.DistCheck;
+import rea.dev.rmil.remote.FunctionPackage;
+import rea.dev.rmil.remote.ServerConfiguration;
 
 import java.rmi.RemoteException;
 import java.util.*;
@@ -15,6 +20,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -23,47 +29,54 @@ class RmilGridManagerImpl implements RmilGridManager {
 
     private static final Logger logger = LoggerFactory.getLogger(RmilGridManagerImpl.class);
 
-    private final Map<UUID, BaseTask> functionMap = new ConcurrentHashMap<>();
+    private final GridItemFetcher fetcher = new GridItemFetcher();
+    private final Map<UUID, DistributedMethod> functionMap = new ConcurrentHashMap<>();
     private final Map<UUID, RemoteServer> serverMap = new ConcurrentHashMap<>();
-    private final Set<RemoteServer> availableServers = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private final Set<UUID> unavailableServers = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Deque<ServerAvailabilityListener> listenerQueue = new ConcurrentLinkedDeque<>();
+    private final Deque<RemoteThread> availableRemoteThreads;
+    private final Deque<RemoteThread> availableLowPriorityThreads;
     private final AtomicInteger localCounter;
 
-    private final Set<UUID> taskAvailableServers;
+
     private int maxLocalTasks;
 
     public RmilGridManagerImpl(int maxLocalTasks, Set<ServerAddress> addresses) {
         this.maxLocalTasks = maxLocalTasks;
         this.localCounter = new AtomicInteger(0);
 
-        availableServers.addAll(getAvailableServers(addresses));
-        taskAvailableServers = new HashSet<>() {
+        this.availableRemoteThreads = new ConcurrentLinkedDeque<>() {
             @Override
-            public boolean add(UUID uuid) {
+            public boolean add(RemoteThread thread) {
                 if (!listenerQueue.isEmpty()) {
                     var listener = listenerQueue.pop();
-                    listener.onAvailable(uuid);
+                    listener.onAvailable(thread);
                     return true;
                 }
-                return super.add(uuid);
+                return super.add(thread);
             }
         };
+        this.availableLowPriorityThreads = new ConcurrentLinkedDeque<>();
 
+        mapServers(addresses);
+    }
+
+    private void mapServers(Set<ServerAddress> addresses) {
+        List<RemoteThread> threads = new ArrayList<>();
+        getAvailableServers(addresses).parallelStream()
+                .forEach(server -> {
+                    serverMap.put(server.getID(), server);
+                    threads.add(server);
+                    threads.addAll(server.getAdditionalThreads());
+                });
+        Collections.shuffle(threads);
+        availableRemoteThreads.addAll(threads);
     }
 
     protected Set<RemoteServer> getAvailableServers(Set<ServerAddress> addresses) {
-        return addresses.stream().map(servAddr -> {
-            var server = new RemoteServer(servAddr.getAddress(), servAddr.getPort());
-            serverMap.put(server.serverID, server);
-            return server;
-        }).filter(server -> {
-            if (!server.isLoaded()) {
-                unavailableServers.add(server.serverID);
-                return false;
-            }
-            return true;
-        }).collect(Collectors.toSet());
+        return addresses.stream().map(servAddr -> RemoteServer.load(servAddr.getAddress()))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toSet());
         //todo: create a mechanism of determining what servers are available after initial loading attempt
         //todo: create a mechanism that pings unavailable servers occasionally
     }
@@ -73,154 +86,188 @@ class RmilGridManagerImpl implements RmilGridManager {
         this.maxLocalTasks = max;
     }
 
-    public <T> Predicate<? super T> filterTask(Predicate<? super T> predicate) {
-        DistTask<? super T, Boolean> ttDistPredicate = predicate::test;
-        var functionID = registerFunctionTask(ttDistPredicate);
+    @Override
+    public <T> Function<T, DistributedItem<T>> mapToGrid() {
+        return this::buildDistributedItem;
+    }
 
-        return (Predicate<T>) argument -> {
+    @Override
+    public <T> Function<DistributedItem<T>, T> mapFromGrid() {
+        return DistributedItem::getItem;
+    }
+
+    @Override
+    @SuppressWarnings("java:S1905") //cast is warranted
+    public <T> Predicate<DistributedItem<T>> gridPredicate(Predicate<T> predicate) {
+        DistCheck<T, Boolean> method = predicate::test;
+        return distItem -> check(method, registerMethod(method), distItem);
+    }
+
+    private <T, R> R check(DistCheck<T, R> checkFunc, UUID methodID, DistributedItem<T> distributedItem) {
+        if (distributedItem.getNodeID() == null) {
+            var item = distributedItem.getItem();
             if (localCounter.incrementAndGet() < maxLocalTasks) {
-                var result = ttDistPredicate.execute(argument);
-                executeWaitingFunctions(null);
+                var result = checkFunc.check(item);
+                fireListeners(null);
                 localCounter.decrementAndGet();
                 return result;
             }
             localCounter.decrementAndGet();
-            return executeFunctionTask(new FunctionTask<T, Boolean>(functionID, argument));
-        };
+            return checkItemFromLocal(new CheckFromLocal<>(methodID, item));
+        }
+        //todo:
+        throw new UnsupportedOperationException();
     }
 
-    @Override
-    public <T> Predicate<DistributedItem<T>> gridPredicate(Predicate<T> predicate) {
-        return null;
-    }
-
-    private void executeWaitingFunctions(UUID serverID) {
+    private void fireListeners(RemoteThread thread) {
         while (!listenerQueue.isEmpty()) {
             try {
-                listenerQueue.pop().onAvailable(serverID);
+                listenerQueue.pop().onAvailable(thread);
             } catch (NoSuchElementException ignored) {
                 //ignored exception
             }
         }
     }
 
-    /**
-     * Gets next available server ready for task execution.
-     * If no server is available will return an empty optional instead.
-     *
-     * @return Optional server
-     */
-    protected synchronized Optional<UUID> getNextTaskAvailableServer() {
-        var serverOpt = taskAvailableServers.stream().findFirst();
-        serverOpt.ifPresent(taskAvailableServers::remove);
-        return serverOpt;
+    protected UUID registerMethod(DistributedMethod distributedMethod) {
+        var methodID = UUID.randomUUID();
+        functionMap.put(methodID, distributedMethod);
+        removeServers(sendFunctionPackage(new FunctionPackage(methodID, distributedMethod)));
+        return methodID;
     }
 
-    protected UUID registerFunctionTask(BaseTask baseTask) {
-        var functionID = UUID.randomUUID();
-        functionMap.put(functionID, baseTask);
-        availableServers.removeAll(sendFunctionAndReturnUnavailable(new FunctionPackage(functionID, baseTask)));
-        return functionID;
+    private void removeServers(Set<UUID> upForRemoval) {
+        upForRemoval.forEach(id -> {
+            serverMap.remove(id);
+            availableRemoteThreads.removeIf(thread -> thread.getID() == id);
+            availableLowPriorityThreads.removeIf(thread -> thread.getID() == id);
+        });
     }
 
-    protected Set<RemoteServer> sendFunctionAndReturnUnavailable(FunctionPackage functionPackage) {
-        Set<RemoteServer> upForRemoval = new HashSet<>();
-        availableServers.forEach(remoteServer -> {
+    protected Set<UUID> sendFunctionPackage(FunctionPackage functionPackage) {
+        Set<UUID> upForRemoval = new HashSet<>();
+        serverMap.forEach((id, remoteServer) -> {
             try {
                 remoteServer.getExecutorContainer()
-                        .registerFunction(functionPackage, false);
+                        .registerFunction(functionPackage);
             } catch (RemoteException e) {
                 logger.error("Remote exception while attempting to send a function to " + remoteServer.getAddress(), e);
-                var sID = remoteServer.serverID;
-                unavailableServers.add(sID);
-                upForRemoval.add(remoteServer);
+                upForRemoval.add(id);
             }
         });
         return upForRemoval;
     }
 
-    protected <T, R> R executeFunctionTask(FunctionTask<T, R> functionTask) {
-        var serverID = getNextTaskAvailableServer();
-        serverID.ifPresentOrElse((uuid -> {
-                    if (functionTask.removeListener()) {
-                        try {
-                            functionTask.returnValueRef.set(executeTaskOnServer(uuid,
-                                    functionTask.functionID, functionTask.argument));
-                        } catch (RemoteException e) {
-                            logger.error("Remote exception while attempting to execute a task on "
-                                    + serverMap.get(uuid).getAddress(), e);
-                            //todo: add retry mechanism
-                            availableServers.remove(serverMap.get(uuid));
-                            functionTask.listen();
-                            functionTask.returnValueRef.set(executeFunctionTask(functionTask));
-                        }
-                    }
-                }),
-                (() -> functionTask.returnValueRef.set(executeTaskServerUnavailable(functionTask))));
-        return functionTask.returnValueRef.get();
+    protected <T, R> R checkItemFromLocal(CheckFromLocal<T, R> checkFromLocal) {
+        getNextThread().ifPresentOrElse(server -> {
+            if (checkFromLocal.removeListener()) {
+                try {
+                    checkFromLocal.returnValueRef.set(checkOnRemote(server,
+                            checkFromLocal.methodID, checkFromLocal.argumentPackage));
+                } catch (RemoteException e) {
+                    logger.error("Remote exception while attempting to execute a task on "
+                            + server.getAddress(), e);
+                    checkFromLocal.listen();
+                    checkFromLocal.returnValueRef.set(checkItemFromLocal(checkFromLocal));
+                }
+            }
+        }, () -> checkFromLocal.returnValueRef.set(checkWhenAvailableFromLocal(checkFromLocal)));
+        return checkFromLocal.returnValueRef.get();
+    }
+
+    private Optional<RemoteThread> getNextThread() {
+        try {
+            return Optional.of(availableRemoteThreads.pop());
+        } catch (NoSuchElementException elementException) {
+            try {
+                return Optional.of(availableLowPriorityThreads.pop());
+            } catch (NoSuchElementException lowElementException) {
+                return Optional.empty();
+            }
+        }
     }
 
     @SuppressWarnings("java:S6212")
     //suppressing sonarlint, since replacing line 2 R with var would cause executeTask to return an Object instead of R
-    protected <T, R> R executeTaskOnServer(UUID serverID, UUID functionID, T argument) throws RemoteException {
-        var taskServer = serverMap.get(serverID);
-        R returnValue = taskServer.getExecutorContainer().executeTask(functionID, argument);
-        executeWaitingFunctions(serverID);
-        taskAvailableServers.add(serverID);
+    protected <T, R> R checkOnRemote(RemoteThread thread, UUID methodID, ArgumentPackage<T> argumentPackage) throws RemoteException {
+        R returnValue = thread.getExecutorContainer().checkAndReturnValue(methodID, argumentPackage);
+        finalizeThread(thread);
         return returnValue;
+    }
+
+    private void finalizeThread(RemoteThread thread) {
+        if (thread.getPriority() != ServerConfiguration.Priority.LOW) {
+            fireListeners(thread);
+            availableRemoteThreads.add(thread);
+        } else {
+            availableLowPriorityThreads.add(thread);
+        }
     }
 
     @SuppressWarnings({"java:S2222"})
     //suppressing sonarlint, since if the condition listener is not called, the system has already entered deadlock
     //which by design will not occur.
-    protected <T, R> R executeTaskServerUnavailable(FunctionTask<T, R> functionTask) {
+    protected <T, R> R checkWhenAvailableFromLocal(CheckFromLocal<T, R> checkFromLocal) {
         try {
             //Awaits listener execution
             if (localCounter.get() <= maxLocalTasks) {
                 localCounter.incrementAndGet();
-                executeWaitingFunctions(null);
+                fireListeners(null);
                 localCounter.decrementAndGet();
             }
-            functionTask.countDown.await();
+            checkFromLocal.countDown.await();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
         }
-        return functionTask.returnValueRef.get();
+        return checkFromLocal.returnValueRef.get();
     }
 
-    public void stop() {
-        //todo: release all resources
+    public <T> DistributedItem<T> buildDistributedItem(T object) {
+        return new DistributedItemLocal<>(UUID.randomUUID(), object);
+    }
+
+    private <R> DistributedItemFuture<R> repackageItemFuture(UUID itemID, UUID nodeID) {
+        return new DistributedItemFuture<>(itemID, nodeID, fetcher);
     }
 
     @FunctionalInterface
     private interface ServerAvailabilityListener {
 
-        void onAvailable(UUID server);
+        void onAvailable(RemoteThread server);
 
     }
 
-    protected class FunctionTask<T, R> {
-        public final UUID functionID;
+    public class GridItemFetcher implements ItemFetcher {
+        @Override
+        public <R> R getItem(UUID nodeID, UUID itemID) throws RemoteException {
+            var server = serverMap.get(nodeID);
+            return server.getExecutorContainer().getItem(itemID);
+        }
+
+    }
+
+    protected class CheckFromLocal<T, R> {
+        public final UUID methodID;
         public final AtomicReference<R> returnValueRef;
         public final CountDownLatch countDown;
+        public final ArgumentPackage<T> argumentPackage;
         private final ServerAvailabilityListener listener;
-        T argument;
 
         @SuppressWarnings("unchecked")
-        public FunctionTask(UUID functionID, T argument) {
-            this.functionID = functionID;
-            this.argument = argument;
+        public CheckFromLocal(UUID methodID, T argument) {
+            this.methodID = methodID;
+            this.argumentPackage = new ArgumentPackage<>(argument, UUID.randomUUID());
             this.countDown = new CountDownLatch(1);
             this.returnValueRef = new AtomicReference<>();
             this.listener = server -> {
                 try {
                     if (server == null) {
-                        DistTask<T, R> function = (DistTask<T, R>) functionMap.get(functionID);
-                        returnValueRef.set(function.execute(argument));
+                        DistCheck<T, R> function = (DistCheck<T, R>) functionMap.get(methodID);
+                        returnValueRef.set(function.check(argument));
                         localCounter.decrementAndGet();
                     } else {
-                        returnValueRef.set(executeTaskOnServer(server, functionID, argument));
+                        returnValueRef.set(checkOnRemote(server, methodID, argumentPackage));
                     }
                 } catch (Exception e) {
                     logger.error("Critical exception while attempting execute task for a waiting thread", e);

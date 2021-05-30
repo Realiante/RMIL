@@ -1,8 +1,8 @@
 package dev.rea.rmil.client;
 
 import dev.rea.rmil.client.grid.GridBuilder;
-import rea.dev.rmil.remote.items.DistributedItem;
 
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 public final class RMIL {
@@ -15,6 +15,14 @@ public final class RMIL {
 
     public static void setMaxLocalTasks(int maxLocalTasks) {
         gridManager.setMaxLocalTasks(maxLocalTasks);
+    }
+
+    public static <T> Function<T, DistributedItem<T>> mapToGrid() {
+        return gridManager.mapToGrid();
+    }
+
+    public static <T> Function<DistributedItem<T>, T> mapFromGrid(){
+        return gridManager.mapFromGrid();
     }
 
     public static <T> Predicate<DistributedItem<T>> gridPredicate(Predicate<T> predicate) {

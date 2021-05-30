@@ -1,11 +1,8 @@
 package dev.rea.rmil.engine.backend;
 
-import rea.dev.rmil.remote.BaseTask;
-import rea.dev.rmil.remote.DistBiTask;
-import rea.dev.rmil.remote.DistTask;
-import rea.dev.rmil.remote.RemoteEngine;
-import rea.dev.rmil.remote.items.FunctionPackage;
+import rea.dev.rmil.remote.*;
 
+import java.rmi.RemoteException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -14,14 +11,19 @@ import java.util.UUID;
 final class RmilRemoteEngine implements RemoteEngine {
 
     private final UUID localIdentifier;
-    private final Map<UUID, BaseTask> functionMap = new HashMap<>();
+    private final Map<UUID, DistributedMethod> functionMap = new HashMap<>();
 
     protected RmilRemoteEngine() {
         localIdentifier = UUID.randomUUID();
     }
 
     @Override
-    public void registerFunction(FunctionPackage functionPackage, boolean askForItems) {
+    public ServerConfiguration getConfiguration() throws RemoteException {
+        return null;
+    }
+
+    @Override
+    public void registerFunction(FunctionPackage functionPackage) {
         functionMap.put(functionPackage.getFunctionID(), functionPackage.getFunction());
     }
 
@@ -30,18 +32,28 @@ final class RmilRemoteEngine implements RemoteEngine {
         return functionMap.remove(functionID) != null;
     }
 
-    @SuppressWarnings("unchecked")
     @Override
-    public <R, T> R executeTask(UUID functionID, T argument) {
-        DistTask<T, R> function = (DistTask<T, R>) functionMap.get(functionID);
-        return function.execute(argument);
+    public <R> R getItem(UUID itemID) throws RemoteException {
+        //todo
+        return null;
     }
 
-    @SuppressWarnings("unchecked")
     @Override
-    public <R, T, A> R executeBiTask(UUID functionID, T argument, A anotherArgument) {
-        DistBiTask<T, A, R> function = (DistBiTask<T, A, R>) functionMap.get(functionID);
-        return function.execute(argument, anotherArgument);
+    public boolean removeItem(UUID itemID) throws RemoteException {
+        //todo
+        return false;
+    }
+
+    @Override
+    public <R, T> R checkAndReturnValue(UUID functionID, ArgumentPackage<T> argumentPackage) throws RemoteException {
+        //todo
+        return null;
+    }
+
+    @Override
+    public <R> R checkAndReturnValue(UUID functionID, UUID itemID) throws RemoteException {
+        //todo
+        return null;
     }
 
     @Override

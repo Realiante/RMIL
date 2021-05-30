@@ -1,7 +1,8 @@
 package dev.rea.rmil.client.grid;
 
+import dev.rea.rmil.client.DistributedItem;
 import dev.rea.rmil.client.RmilGridManager;
-import dev.rea.rmil.client.grid.RmilGridManagerImpl.FunctionTask;
+import dev.rea.rmil.client.grid.RmilGridManagerImpl.CheckFromLocal;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -9,11 +10,13 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import rea.dev.rmil.remote.ServerConfiguration;
 
 import java.rmi.RemoteException;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
@@ -27,11 +30,10 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.params.provider.Arguments.of;
 import static org.mockito.Mockito.*;
 
-class RmilGridManagerTest {
+class RmilGridManagerImplCheck_NoGridTest {
 
-    static RemoteServer remoteServer1;
-    static RemoteServer remoteServer2;
-    static RemoteServer remoteServer3;
+    static RemoteServer remoteServer;
+    static RemoteServer remoteServerLow;
 
     static Stream<Arguments> sleepTimeSource() {
         return Stream.of(
@@ -53,15 +55,24 @@ class RmilGridManagerTest {
     }
 
     @BeforeAll
-    static void setup() {
-        remoteServer1 = mock(RemoteServer.class, withSettings().useConstructor("test1", 1));
-        when(remoteServer1.attemptLoad()).thenReturn(true);
+    static void setup(){
+        Assertions.assertDoesNotThrow(()->{
+            remoteServer = mock(RemoteServer.class);
+            when(remoteServer.loadConfiguration()).thenReturn(
+                    new ServerConfiguration(UUID.randomUUID(), 2, ServerConfiguration.Priority.NORMAL));
+            doCallRealMethod().when(remoteServer).setConfiguration(any());
+            remoteServer.setConfiguration(remoteServer.loadConfiguration());
 
-        remoteServer2 = mock(RemoteServer.class, withSettings().useConstructor("test2", 2));
-        when(remoteServer2.attemptLoad()).thenReturn(true);
-
-        remoteServer3 = mock(RemoteServer.class, withSettings().useConstructor("test3", 3));
-        when(remoteServer3.attemptLoad()).thenReturn(true);
+            remoteServerLow = mock(RemoteServer.class);
+            when(remoteServerLow.loadConfiguration()).thenReturn(
+                    new ServerConfiguration(UUID.randomUUID(), 1, ServerConfiguration.Priority.LOW));
+            doCallRealMethod().when(remoteServerLow).setConfiguration(any());
+            doAnswer(invocation -> {
+                remoteServerLow.setConfiguration(remoteServerLow.loadConfiguration());
+                return invocation;
+            }).when(remoteServerLow).loadContainer(any());
+            remoteServerLow.setConfiguration(remoteServerLow.loadConfiguration());
+        });
     }
 
     @Test
@@ -81,19 +92,25 @@ class RmilGridManagerTest {
         RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
                 withSettings().useConstructor(3, Set.of()));
         when(dm.getAvailableServers(anySet())).thenReturn(Set.of());
-        when(dm.filterTask(predicate)).thenCallRealMethod();
-        when(dm.registerFunctionTask(any())).thenCallRealMethod();
-        when(dm.sendFunctionAndReturnUnavailable(any())).thenReturn(Set.of());
-        when(dm.executeFunctionTask(any())).then(invocation -> {
+        when(dm.gridPredicate(predicate)).thenCallRealMethod();
+        when(dm.registerMethod(any())).thenCallRealMethod();
+        when(dm.sendFunctionPackage(any())).thenReturn(Set.of());
+        when(dm.checkItemFromLocal(any())).then(invocation -> {
                     pauseCondition.set(true);
-                    return predicate.test(((FunctionTask<Integer, Boolean>) invocation.getArgument(0)).argument);
+                    return predicate.test(((CheckFromLocal<Integer, Boolean>)
+                            invocation.getArgument(0)).argumentPackage.getArgument());
                 }
         );
+        when(dm.mapToGrid()).thenCallRealMethod();
+        when(dm.buildDistributedItem(any())).thenCallRealMethod();
 
         Set<Integer> filteredSet = new HashSet<>();
         Assertions.assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
             filteredSet.addAll(testSet.stream().parallel()
-                    .filter(dm.filterTask(predicate)).collect(Collectors.toSet()));
+                    .map(dm.mapToGrid())
+                    .filter(dm.gridPredicate(predicate))
+                    .map(DistributedItem::getItem)
+                    .collect(Collectors.toSet()));
         });
 
         Assertions.assertEquals(5, filteredSet.size());
@@ -118,16 +135,20 @@ class RmilGridManagerTest {
         RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
                 withSettings().useConstructor(4, Set.of()));
         when(dm.getAvailableServers(anySet())).thenReturn(Set.of());
-        when(dm.filterTask(predicate)).thenCallRealMethod();
-        when(dm.registerFunctionTask(any())).thenCallRealMethod();
-        when(dm.sendFunctionAndReturnUnavailable(any())).thenReturn(Set.of());
-        when(dm.executeFunctionTask(any())).thenCallRealMethod();
-        when(dm.executeTaskServerUnavailable(any())).thenCallRealMethod();
+        when(dm.gridPredicate(predicate)).thenCallRealMethod();
+        when(dm.registerMethod(any())).thenCallRealMethod();
+        when(dm.sendFunctionPackage(any())).thenReturn(Set.of());
+        when(dm.checkItemFromLocal(any())).thenCallRealMethod();
+        when(dm.checkWhenAvailableFromLocal(any())).thenCallRealMethod();
+        when(dm.mapToGrid()).thenCallRealMethod();
+        when(dm.buildDistributedItem(any())).thenCallRealMethod();
 
         Set<Integer> filteredSet = new HashSet<>();
         Assertions.assertTimeoutPreemptively(Duration.ofSeconds(timeOut), () -> {
             filteredSet.addAll(testSet.stream().parallel()
-                    .filter(dm.filterTask(predicate)).collect(Collectors.toSet()));
+                    .map(dm.mapToGrid())
+                    .filter(dm.gridPredicate(predicate))
+                    .map(DistributedItem::getItem).collect(Collectors.toSet()));
         });
 
         Assertions.assertEquals(5, filteredSet.size());
@@ -151,14 +172,17 @@ class RmilGridManagerTest {
 
         RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
                 withSettings().useConstructor(0, Set.of()));
-        when(dm.getAvailableServers(anySet())).thenReturn(Set.of(remoteServer1, remoteServer2, remoteServer3));
-        when(dm.filterTask(predicate)).thenCallRealMethod();
-        when(dm.registerFunctionTask(any())).thenCallRealMethod();
-        when(dm.sendFunctionAndReturnUnavailable(any())).thenReturn(Set.of());
-        when(dm.executeFunctionTask(any())).thenCallRealMethod();
-        when(dm.executeTaskServerUnavailable(any())).thenCallRealMethod();
+        when(dm.getAvailableServers(anySet())).thenReturn(Set.of(remoteServer, remoteServerLow));
+        when(dm.gridPredicate(predicate)).thenCallRealMethod();
+        when(dm.registerMethod(any())).thenCallRealMethod();
+        when(dm.sendFunctionPackage(any())).thenReturn(Set.of());
+        when(dm.checkItemFromLocal(any())).thenCallRealMethod();
+        when(dm.checkWhenAvailableFromLocal(any())).thenCallRealMethod();
+        when(dm.mapToGrid()).thenCallRealMethod();
+        when(dm.buildDistributedItem(any())).thenCallRealMethod();
+
         try {
-            when(dm.executeTaskOnServer(any(), any(), any())).then(invocation ->
+            when(dm.checkOnRemote(any(), any(), any())).then(invocation ->
                     predicate.test(invocation.getArgument(2)));
         } catch (RemoteException e) {
             Assertions.fail(e);
@@ -167,7 +191,9 @@ class RmilGridManagerTest {
         Set<Integer> filteredSet = new HashSet<>();
         Assertions.assertTimeoutPreemptively(Duration.ofSeconds(timeOut), () -> {
             filteredSet.addAll(testSet.stream().parallel()
-                    .filter(dm.filterTask(predicate)).collect(Collectors.toSet()));
+                    .map(dm.mapToGrid())
+                    .filter(dm.gridPredicate(predicate))
+                    .map(DistributedItem::getItem).collect(Collectors.toSet()));
         });
 
         Assertions.assertEquals(5, filteredSet.size());
@@ -192,18 +218,24 @@ class RmilGridManagerTest {
         RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
                 withSettings().useConstructor(4, Set.of()));
         when(dm.getAvailableServers(anySet())).thenReturn(Set.of());
-        when(dm.filterTask(predicate)).thenCallRealMethod();
-        when(dm.registerFunctionTask(any())).thenCallRealMethod();
-        when(dm.sendFunctionAndReturnUnavailable(any())).thenReturn(Set.of());
-        when(dm.executeFunctionTask(any())).thenCallRealMethod();
-        when(dm.executeTaskServerUnavailable(any())).thenCallRealMethod();
+        when(dm.gridPredicate(predicate)).thenCallRealMethod();
+        when(dm.registerMethod(any())).thenCallRealMethod();
+        when(dm.sendFunctionPackage(any())).thenReturn(Set.of());
+        when(dm.checkItemFromLocal(any())).thenCallRealMethod();
+        when(dm.checkWhenAvailableFromLocal(any())).thenCallRealMethod();
+        when(dm.mapToGrid()).thenCallRealMethod();
+        when(dm.buildDistributedItem(any())).thenCallRealMethod();
 
         Set<Integer> filteredSet = new HashSet<>();
-        Assertions.assertTimeoutPreemptively(Duration.ofSeconds(20), () -> {
+        Assertions.assertTimeoutPreemptively(Duration.ofSeconds(timeOut), () -> {
             ForkJoinPool customPool = new ForkJoinPool(8);
             try {
                 filteredSet.addAll(customPool.submit(() ->
-                        testSet.stream().parallel().filter(dm.filterTask(predicate)).collect(Collectors.toSet()))
+                        //RMIL code in stream here
+                        testSet.stream().parallel()
+                                .map(dm.mapToGrid())
+                                .filter(dm.gridPredicate(predicate))
+                                .map(DistributedItem::getItem).collect(Collectors.toSet()))
                         .get());
             } catch (InterruptedException | ExecutionException e) {
                 Assertions.fail(e);
@@ -224,14 +256,17 @@ class RmilGridManagerTest {
         Predicate<Integer> predicate = arg -> arg > 1;
         RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
                 withSettings().useConstructor(4, Set.of()));
-        when(dm.getAvailableServers(anySet())).thenReturn(Set.of(remoteServer1, remoteServer2, remoteServer3));
-        when(dm.filterTask(predicate)).thenCallRealMethod();
-        when(dm.registerFunctionTask(any())).thenCallRealMethod();
-        when(dm.sendFunctionAndReturnUnavailable(any())).thenReturn(Set.of());
-        when(dm.executeFunctionTask(any())).thenCallRealMethod();
-        when(dm.executeTaskServerUnavailable(any())).thenCallRealMethod();
+        when(dm.getAvailableServers(anySet())).thenReturn(Set.of(remoteServer, remoteServerLow));
+        when(dm.gridPredicate(predicate)).thenCallRealMethod();
+        when(dm.registerMethod(any())).thenCallRealMethod();
+        when(dm.sendFunctionPackage(any())).thenReturn(Set.of());
+        when(dm.checkItemFromLocal(any())).thenCallRealMethod();
+        when(dm.checkWhenAvailableFromLocal(any())).thenCallRealMethod();
+        when(dm.mapToGrid()).thenCallRealMethod();
+        when(dm.buildDistributedItem(any())).thenCallRealMethod();
+
         try {
-            when(dm.executeTaskOnServer(any(), any(), any())).then(invocation ->
+            when(dm.checkOnRemote(any(), any(), any())).then(invocation ->
                     predicate.test(invocation.getArgument(2)));
         } catch (RemoteException e) {
             Assertions.fail(e);
@@ -240,7 +275,10 @@ class RmilGridManagerTest {
         Set<Integer> filteredSet = new HashSet<>();
         Assertions.assertTimeoutPreemptively(Duration.ofSeconds(20), () -> {
             filteredSet.addAll(testSet.stream().parallel()
-                    .filter(dm.filterTask(predicate)).collect(Collectors.toSet()));
+                    .map(dm.mapToGrid())
+                    .filter(dm.gridPredicate(predicate))
+                    .map(DistributedItem::getItem)
+                    .collect(Collectors.toSet()));
         });
 
         Assertions.assertEquals(191000 - 1, filteredSet.size());
@@ -255,14 +293,17 @@ class RmilGridManagerTest {
         Predicate<Integer> predicate = arg -> arg > 1;
         RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
                 withSettings().useConstructor(4, Set.of()));
-        when(dm.getAvailableServers(anySet())).thenReturn(Set.of(remoteServer1, remoteServer2, remoteServer3));
-        when(dm.filterTask(predicate)).thenCallRealMethod();
-        when(dm.registerFunctionTask(any())).thenCallRealMethod();
-        when(dm.sendFunctionAndReturnUnavailable(any())).thenReturn(Set.of());
-        when(dm.executeFunctionTask(any())).thenCallRealMethod();
-        when(dm.executeTaskServerUnavailable(any())).thenCallRealMethod();
+        when(dm.getAvailableServers(anySet())).thenReturn(Set.of(remoteServer, remoteServerLow));
+        when(dm.gridPredicate(predicate)).thenCallRealMethod();
+        when(dm.registerMethod(any())).thenCallRealMethod();
+        when(dm.sendFunctionPackage(any())).thenReturn(Set.of());
+        when(dm.checkItemFromLocal(any())).thenCallRealMethod();
+        when(dm.checkWhenAvailableFromLocal(any())).thenCallRealMethod();
+        when(dm.mapToGrid()).thenCallRealMethod();
+        when(dm.buildDistributedItem(any())).thenCallRealMethod();
+
         try {
-            when(dm.executeTaskOnServer(any(), any(), any())).then(invocation ->
+            when(dm.checkOnRemote(any(), any(), any())).then(invocation ->
                     predicate.test(invocation.getArgument(2)));
         } catch (RemoteException e) {
             Assertions.fail(e);
@@ -273,7 +314,10 @@ class RmilGridManagerTest {
             ForkJoinPool customPool = new ForkJoinPool(24);
             try {
                 filteredSet.addAll(customPool.submit(() ->
-                        testSet.stream().parallel().filter(dm.filterTask(predicate)).collect(Collectors.toSet()))
+                        testSet.stream().parallel()
+                                .map(dm.mapToGrid())
+                                .filter(dm.gridPredicate(predicate))
+                                .map(DistributedItem::getItem).collect(Collectors.toSet()))
                         .get());
             } catch (InterruptedException | ExecutionException e) {
                 Assertions.fail(e);
@@ -282,4 +326,5 @@ class RmilGridManagerTest {
 
         Assertions.assertEquals(191000 - 1, filteredSet.size());
     }
+
 }

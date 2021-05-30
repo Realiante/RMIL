@@ -3,8 +3,9 @@ package dev.rea.rmil.engine.backend;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import rea.dev.rmil.remote.DistTask;
-import rea.dev.rmil.remote.items.FunctionPackage;
+import rea.dev.rmil.remote.ArgumentPackage;
+import rea.dev.rmil.remote.DistributedMethod.DistCheck;
+import rea.dev.rmil.remote.FunctionPackage;
 
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -20,21 +21,23 @@ class RmilRemoteEngineTest {
 
         predicateUUID = UUID.randomUUID();
         Predicate<Integer> predicate = integer -> integer > 1;
-        DistTask<Integer, Boolean> predicateFunction = predicate::test;
-        rmilRemoteEngine.registerFunction(new FunctionPackage(predicateUUID, predicateFunction), false);
+        DistCheck<Integer, Boolean> predicateFunction = predicate::test;
+        rmilRemoteEngine.registerFunction(new FunctionPackage(predicateUUID, predicateFunction));
 
     }
 
     @Test
     void testPredicateExecution() {
-        var result1 = rmilRemoteEngine.executeTask(predicateUUID, 2);
-        var result2 = rmilRemoteEngine.executeTask(predicateUUID, 0);
+        Assertions.assertDoesNotThrow(() -> {
+            var result1 = rmilRemoteEngine.checkAndReturnValue(predicateUUID, new ArgumentPackage<>(2, UUID.randomUUID()));
+            var result2 = rmilRemoteEngine.checkAndReturnValue(predicateUUID, new ArgumentPackage<>(2, UUID.randomUUID()));
 
-        Assertions.assertTrue(result1 instanceof Boolean);
-        Assertions.assertTrue((Boolean) result1);
+            Assertions.assertTrue(result1 instanceof Boolean);
+            Assertions.assertTrue((Boolean) result1);
 
-        Assertions.assertTrue(result2 instanceof Boolean);
-        Assertions.assertFalse((Boolean) result2);
+            Assertions.assertTrue(result2 instanceof Boolean);
+            Assertions.assertFalse((Boolean) result2);
+        });
     }
 
 
