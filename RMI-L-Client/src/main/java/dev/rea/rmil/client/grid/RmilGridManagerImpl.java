@@ -34,8 +34,8 @@ class RmilGridManagerImpl implements RmilGridManager {
     private final Map<UUID, DistributedMethod> functionMap = new ConcurrentHashMap<>();
     private final Map<UUID, RemoteServer> serverMap = new ConcurrentHashMap<>();
     private final Deque<ServerAvailabilityListener> listenerQueue = new ConcurrentLinkedDeque<>();
-    private final Deque<RemoteThread> availableRemoteThreads;
-    private final Deque<RemoteThread> availableLowPriorityThreads;
+    private final Deque<RemoteThread> availableRemoteThreads = new ConcurrentLinkedDeque<>();
+    private final Deque<RemoteThread> availableLowPriorityThreads = new ConcurrentLinkedDeque<>();
     private final AtomicInteger localCounter;
 
 
@@ -48,20 +48,6 @@ class RmilGridManagerImpl implements RmilGridManager {
     public RmilGridManagerImpl(int maxLocalTasks, Set<ServerAddress> addresses) {
         this.maxLocalTasks = maxLocalTasks;
         this.localCounter = new AtomicInteger(0);
-
-        this.availableRemoteThreads = new ConcurrentLinkedDeque<>() {
-            @Override
-            public boolean add(RemoteThread thread) {
-                if (!listenerQueue.isEmpty()) {
-                    var listener = listenerQueue.pop();
-                    listener.onAvailable(thread);
-                    return true;
-                }
-                return super.add(thread);
-            }
-        };
-        this.availableLowPriorityThreads = new ConcurrentLinkedDeque<>();
-
         mapServers(addresses);
     }
 
