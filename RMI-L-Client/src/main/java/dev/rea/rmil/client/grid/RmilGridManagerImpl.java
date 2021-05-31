@@ -3,7 +3,6 @@ package dev.rea.rmil.client.grid;
 import dev.rea.rmil.client.DistributedItem;
 import dev.rea.rmil.client.RmilGridManager;
 import dev.rea.rmil.client.items.DistributedItemFuture;
-import dev.rea.rmil.client.items.DistributedItemLocal;
 import dev.rea.rmil.client.items.ItemFetcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,10 +88,10 @@ class RmilGridManagerImpl implements RmilGridManager {
     @SuppressWarnings("java:S1905") //cast is warranted
     public <T> Predicate<DistributedItem<T>> gridPredicate(Predicate<T> predicate) {
         DistCheck<T, Boolean> method = predicate::test;
-        return distItem -> check(method, registerMethod(method), distItem);
+        return distItem -> check(method, registerMethod(method), (DistributedItemFuture<T>) distItem);
     }
 
-    private <T, R> R check(DistCheck<T, R> checkFunc, UUID methodID, DistributedItem<T> distributedItem) {
+    private <T, R> R check(DistCheck<T, R> checkFunc, UUID methodID, DistributedItemFuture<T> distributedItem) {
         if (distributedItem.getNodeID() == null) {
             var item = distributedItem.getItem();
             if (localCounter.incrementAndGet() < maxLocalTasks) {
@@ -102,7 +101,9 @@ class RmilGridManagerImpl implements RmilGridManager {
                 return result;
             }
             localCounter.decrementAndGet();
-            return checkItemFromLocal(new CheckFromLocal<>(methodID, item));
+            CheckResult<R> checkResult = checkItemFromLocal(new CheckFromLocal<>(methodID, item));
+            distributedItem.setNodeID(checkResult.responsibleNode);
+            return checkResult.returnValue;
         }
         //todo:
         throw new UnsupportedOperationException();
@@ -147,7 +148,7 @@ class RmilGridManagerImpl implements RmilGridManager {
         return upForRemoval;
     }
 
-    protected <T, R> R checkItemFromLocal(CheckFromLocal<T, R> checkFromLocal) {
+    protected <T, R> CheckResult<R> checkItemFromLocal(CheckFromLocal<T, R> checkFromLocal) {
         getNextThread().ifPresentOrElse(remoteThread -> {
             if (checkFromLocal.removeListener()) {
                 tryCheckItemFromLocal(checkFromLocal, remoteThread, 0);
@@ -204,7 +205,7 @@ class RmilGridManagerImpl implements RmilGridManager {
     @SuppressWarnings({"java:S2222"})
     //suppressing sonarlint, since if the condition listener is not called, the system has already entered deadlock
     //which by design will not occur.
-    protected <T, R> R checkWhenAvailableFromLocal(CheckFromLocal<T, R> checkFromLocal) {
+    protected <T, R> CheckResult<R> checkWhenAvailableFromLocal(CheckFromLocal<T, R> checkFromLocal) {
         try {
             //Awaits listener execution
             if (localCounter.get() <= maxLocalTasks) {
@@ -224,11 +225,7 @@ class RmilGridManagerImpl implements RmilGridManager {
     }
 
     public <T> DistributedItem<T> buildDistributedItem(T object) {
-        return new DistributedItemLocal<>(UUID.randomUUID(), object);
-    }
-
-    private <R> DistributedItemFuture<R> repackageItemFuture(UUID itemID, UUID nodeID) {
-        return new DistributedItemFuture<>(itemID, nodeID, fetcher);
+        return new DistributedItemFuture<>(UUID.randomUUID(), object, fetcher);
     }
 
     @Override
@@ -260,7 +257,7 @@ class RmilGridManagerImpl implements RmilGridManager {
 
     protected class CheckFromLocal<T, R> {
         public final UUID methodID;
-        public final AtomicReference<R> returnValueRef;
+        public final AtomicReference<CheckResult<R>> returnValueRef;
         public final CountDownLatch countDown;
         public final ArgumentPackage<T> argumentPackage;
         private final ServerAvailabilityListener listener;
@@ -275,7 +272,7 @@ class RmilGridManagerImpl implements RmilGridManager {
                 try {
                     if (server == null) {
                         DistCheck<T, R> function = (DistCheck<T, R>) functionMap.get(methodID);
-                        returnValueRef.set(function.check(argument));
+                        returnValueRef.set(new CheckResult<>(null, function.check(argument)));
                         localCounter.decrementAndGet();
                     } else {
                         returnValueRef.set(checkOnRemote(server, methodID, argumentPackage));
@@ -295,6 +292,16 @@ class RmilGridManagerImpl implements RmilGridManager {
 
         public void listen() {
             listenerQueue.add(listener);
+        }
+    }
+
+    protected static class CheckResult<R> {
+        public final UUID responsibleNode;
+        public final R returnValue;
+
+        public CheckResult(UUID responsibleNode, R returnValue) {
+            this.responsibleNode = responsibleNode;
+            this.returnValue = returnValue;
         }
     }
 }

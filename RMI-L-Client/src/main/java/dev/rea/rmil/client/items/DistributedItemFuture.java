@@ -15,8 +15,8 @@ public final class DistributedItemFuture<T> implements DistributedItem<T> {
     private UUID nodeID;
     private T nativeItem;
 
-    public DistributedItemFuture(UUID itemID, UUID nodeID, ItemFetcher fetcher) {
-        this(itemID, nodeID, null, fetcher);
+    public DistributedItemFuture(UUID itemID, T item, ItemFetcher fetcher) {
+        this(itemID, null, item, fetcher);
     }
 
     public DistributedItemFuture(UUID itemID, UUID nodeID, T item, ItemFetcher fetcher) {
@@ -28,7 +28,7 @@ public final class DistributedItemFuture<T> implements DistributedItem<T> {
 
     @Override
     public T getItem() {
-        if (nativeItem != null) {
+        if (nodeID == null) {
             return nativeItem;
         }
 

@@ -3,6 +3,7 @@ package dev.rea.rmil.client.grid;
 import dev.rea.rmil.client.DistributedItem;
 import dev.rea.rmil.client.RmilGridManager;
 import dev.rea.rmil.client.grid.RmilGridManagerImpl.CheckFromLocal;
+import dev.rea.rmil.client.grid.RmilGridManagerImpl.CheckResult;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -72,10 +73,11 @@ class RmilGridManagerImplCheck_NoGridTest {
         });
     }
 
+
     @Test
     @Timeout(value = 60)
     @SuppressWarnings("unchecked")
-    void remotePredicateRemoteConditionReached() {
+    void RemotePathReachableTest() {
         var testSet = Set.of(0, 14, 55, -2, 4, -717, 15, -11, 3, 1);
         AtomicBoolean pauseCondition = new AtomicBoolean(false);
         RmilGridManager gridManager = GridBuilder.buildGrid();
@@ -94,8 +96,9 @@ class RmilGridManagerImplCheck_NoGridTest {
         when(dm.sendFunctionPackage(any())).thenReturn(Set.of());
         when(dm.checkItemFromLocal(any())).then(invocation -> {
                     pauseCondition.set(true);
-                    return predicate.test(((CheckFromLocal<Integer, Boolean>)
+                    var value = predicate.test(((CheckFromLocal<Integer, Boolean>)
                             invocation.getArgument(0)).argumentPackage.getArgument());
+                    return new CheckResult<>(null, value);
                 }
         );
         when(dm.mapToGrid()).thenCallRealMethod();
