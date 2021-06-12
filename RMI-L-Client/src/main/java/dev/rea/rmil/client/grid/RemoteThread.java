@@ -5,7 +5,7 @@ import rea.dev.rmil.remote.ServerConfiguration;
 
 import java.util.UUID;
 
-public interface RemoteThread {
+interface RemoteThread {
 
     String getAddress();
 

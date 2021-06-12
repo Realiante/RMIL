@@ -39,7 +39,7 @@ class RemoteServerThread implements RemoteThread {
         if (this == o) return true;
         if (!(o instanceof RemoteServerThread)) return false;
         RemoteServerThread that = (RemoteServerThread) o;
-        return Objects.equals(parent, that.parent);
+        return parent.equals(that.parent);
     }
 
     @Override

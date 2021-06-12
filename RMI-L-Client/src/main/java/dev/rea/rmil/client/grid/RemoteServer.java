@@ -90,6 +90,7 @@ class RemoteServer implements RemoteThread {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
+        if (o instanceof RemoteServerThread) return o.equals(this);
         if (!(o instanceof RemoteServer)) return false;
         RemoteServer that = (RemoteServer) o;
         return getAddress().equals(that.getAddress());
