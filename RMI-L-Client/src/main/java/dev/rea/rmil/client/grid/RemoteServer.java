@@ -15,7 +15,7 @@ class RemoteServer implements RemoteThread {
 
     private static final Logger logger = LoggerFactory.getLogger(RemoteServer.class);
     private final String address;
-    private final Set<RemoteServerThread> additionalThreads = new HashSet<>();
+    private final List<RemoteServerThread> additionalThreads = new ArrayList<>();
     private UUID serverID;
     private RemoteEngine executorContainer;
     private Priority priority;
@@ -52,9 +52,8 @@ class RemoteServer implements RemoteThread {
         this.serverID = config.getServerID();
         int maxThreads = config.getMaxThreads();
         this.priority = config.getPriority();
-
         for (var i = 1; i < maxThreads; i++) {
-            this.additionalThreads.add(new RemoteServerThread(this, i));
+            this.additionalThreads.add(new RemoteServerThread(this));
         }
     }
 
@@ -64,8 +63,8 @@ class RemoteServer implements RemoteThread {
         setConfiguration(loadConfiguration());
     }
 
-    public Set<RemoteServerThread> getAdditionalThreads() {
-        return Set.copyOf(additionalThreads);
+    public List<RemoteServerThread> getAdditionalThreads() {
+        return List.copyOf(additionalThreads);
     }
 
     @Override

@@ -9,11 +9,9 @@ import java.util.UUID;
 class RemoteServerThread implements RemoteThread {
 
     private final RemoteServer parent;
-    private final int num;
 
-    public RemoteServerThread(RemoteServer parent, int num) {
+    public RemoteServerThread(RemoteServer parent) {
         this.parent = parent;
-        this.num = num;
     }
 
     @Override
@@ -41,11 +39,11 @@ class RemoteServerThread implements RemoteThread {
         if (this == o) return true;
         if (!(o instanceof RemoteServerThread)) return false;
         RemoteServerThread that = (RemoteServerThread) o;
-        return num == that.num && parent.equals(that.parent);
+        return Objects.equals(parent, that.parent);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(parent, num);
+        return Objects.hash(parent);
     }
 }
