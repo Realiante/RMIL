@@ -1,8 +1,7 @@
 package dev.rea.rmil.client;
 
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
-import java.util.function.Predicate;
+import java.util.function.*;
 
 public interface RmilGridManager {
 
@@ -13,6 +12,16 @@ public interface RmilGridManager {
     <T> Function<DistributedItem<T>, T> mapFromGrid();
 
     <T> Predicate<DistributedItem<T>> gridPredicate(Predicate<T> predicate);
+
+    <T, R> Function<DistributedItem<T>, DistributedItem<R>> gridFunction(Function<T, R> function);
+
+    <T> ToIntFunction<DistributedItem<T>> gridToIntFunction(ToIntFunction<DistributedItem<T>> toIntFunction);
+
+    <T> ToDoubleFunction<DistributedItem<T>> gridToDoubleFunction(ToDoubleFunction<DistributedItem<T>> toDoubleFunction);
+
+    <T> ToLongFunction<DistributedItem<T>> gridToLongFunction(ToLongFunction<DistributedItem<T>> toFloatFunction);
+
+    <T> BinaryOperator<DistributedItem<T>> gridBinaryOperator(BinaryOperator<T> biOperator);
 
     void setAwaitTimeout(long timeout, TimeUnit timeUnit);
 

@@ -2,9 +2,9 @@ package dev.rea.rmil.client;
 
 import dev.rea.rmil.client.grid.GridBuilder;
 
+import java.util.Comparator;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
-import java.util.function.Predicate;
+import java.util.function.*;
 
 public final class RMIL {
 
@@ -28,6 +28,35 @@ public final class RMIL {
 
     public static <T> Predicate<DistributedItem<T>> gridPredicate(Predicate<T> predicate) {
         return gridManager.gridPredicate(predicate);
+    }
+
+    public static <T, R> Function<DistributedItem<T>, DistributedItem<R>> gridFunction(Function<T, R> function) {
+        return gridManager.gridFunction(function);
+    }
+
+    public static <T> ToIntFunction<DistributedItem<T>> gridToIntFunction(ToIntFunction<DistributedItem<T>> toIntFunction) {
+        return gridManager.gridToIntFunction(toIntFunction);
+    }
+
+    public static <T> ToDoubleFunction<DistributedItem<T>> gridToDoubleFunction(ToDoubleFunction<DistributedItem<T>> toDoubleFunction) {
+        return gridManager.gridToDoubleFunction(toDoubleFunction);
+    }
+
+    public static <T> ToLongFunction<DistributedItem<T>> gridToLongFunction(ToLongFunction<DistributedItem<T>> toFloatFunction) {
+        return gridManager.gridToLongFunction(toFloatFunction);
+    }
+
+    public static <T> BinaryOperator<DistributedItem<T>> gridBinaryOperator(BinaryOperator<T> biOperator) {
+        return gridManager.gridBinaryOperator(biOperator);
+    }
+
+    @SuppressWarnings("java:S1905")
+    public static <T> Comparator<DistributedItem<T>> sortLocalFirst() {
+        return ((Comparator<DistributedItem<T>>) (o1, o2) -> o1.sortingValue() - o2.sortingValue()).reversed();
+    }
+
+    public static <T> Comparator<DistributedItem<T>> sortRemoteFirst() {
+        return Comparator.comparingInt(DistributedItem::sortingValue);
     }
 
     public static void setAwaitTimeout(long timeout, TimeUnit timeUnit) {

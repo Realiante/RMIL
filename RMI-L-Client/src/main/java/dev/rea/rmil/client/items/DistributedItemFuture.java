@@ -50,6 +50,7 @@ public final class DistributedItemFuture<T> implements DistributedItem<T> {
         return nodeID;
     }
 
+    @Override
     public void setNodeID(UUID nodeID) {
         if (this.nodeID == null && nodeID != null) {
             //this native item is no longer the latest version of the item
@@ -59,6 +60,15 @@ public final class DistributedItemFuture<T> implements DistributedItem<T> {
             this.nodeID = nodeID;
         } else if (this.nodeID != null) {
             throw new IllegalArgumentException("Attempted to pass a null nodeID to a remote distributed future");
+        }
+    }
+
+    @Override
+    public int sortingValue() {
+        if (nodeID == null) {
+            return 0;
+        } else {
+            return 1;
         }
     }
 

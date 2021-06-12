@@ -10,4 +10,8 @@ public interface DistributedItem<T> {
 
     UUID getNodeID();
 
+    void setNodeID(UUID id);
+
+    int sortingValue();
+
 }
