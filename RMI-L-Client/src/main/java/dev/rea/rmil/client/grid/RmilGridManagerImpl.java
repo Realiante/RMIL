@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.*;
 import java.util.stream.Collectors;
 
-
+//todo: test the dist to dist operations
 class RmilGridManagerImpl implements RmilGridManager {
 
     private static final Logger logger = LoggerFactory.getLogger(RmilGridManagerImpl.class);
@@ -315,10 +315,10 @@ class RmilGridManagerImpl implements RmilGridManager {
 
     private <T, R> CheckResultDistSrc<R> checkItemFromDist(OngoingCheckDistSrc<T, R> ongoingCheck) {
         var threadOptional = getFirstServerThread(ongoingCheck.item.getNodeID());
-        threadOptional.ifPresentOrElse(thread ->
-                ongoingCheck.returnValueRef.set(sendDistToDistCheck(ongoingCheck, thread, retries)), () -> {
-            //todo: if thread is not available wait.
-        });
+        threadOptional.ifPresentOrElse(thread -> {
+            if (ongoingCheck.removeListener())
+                ongoingCheck.returnValueRef.set(sendDistToDistCheck(ongoingCheck, thread, retries));
+        }, () -> ongoingCheck.returnValueRef.set(checkWhenAvailableFromDist(ongoingCheck)));
         return new CheckResultDistSrc<>(ongoingCheck.thread, ongoingCheck.returnValueRef.get());
     }
 
@@ -336,6 +336,19 @@ class RmilGridManagerImpl implements RmilGridManager {
             }
             throw new IllegalStateException("Dist to Dist operation could not be performed and recovery is not yet implemented!", e);
         }
+    }
+
+    private <T, R> R checkWhenAvailableFromDist(OngoingCheckDistSrc<T, R> ongoingCheck) {
+        try {
+            if (!ongoingCheck.countDown.await(awaitTimeout, awaitTimeunit)) {
+                throw new InterruptedException(
+                        "An argument has timed out while awaiting a remote server to compute it");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+        return ongoingCheck.returnValueRef.get();
     }
 
     private Optional<RemoteThread> getFirstServerThread(UUID parentID) {
