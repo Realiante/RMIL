@@ -2,8 +2,8 @@ package dev.rea.rmil.client.grid;
 
 import dev.rea.rmil.client.DistributedItem;
 import dev.rea.rmil.client.RmilGridManager;
-import dev.rea.rmil.client.grid.RmilGridManagerImpl.CheckFromLocal;
-import dev.rea.rmil.client.grid.RmilGridManagerImpl.CheckResult;
+import dev.rea.rmil.client.grid.RmilGridManagerImpl.CheckResultLocalSrc;
+import dev.rea.rmil.client.grid.RmilGridManagerImpl.OngoingCheckLocalSrc;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -96,9 +96,9 @@ class RmilGridManagerImplCheck_NoGridTest {
         when(dm.sendFunctionPackage(any())).thenReturn(Set.of());
         when(dm.checkItemFromLocal(any())).then(invocation -> {
                     pauseCondition.set(true);
-                    var value = predicate.test(((CheckFromLocal<Integer, Boolean>)
+                    var value = predicate.test(((OngoingCheckLocalSrc<Integer, Boolean>)
                             invocation.getArgument(0)).argumentPackage.getArgument());
-                    return new CheckResult<>(null, value);
+                    return new CheckResultLocalSrc<>(null, value);
                 }
         );
         when(dm.mapToGrid()).thenCallRealMethod();
