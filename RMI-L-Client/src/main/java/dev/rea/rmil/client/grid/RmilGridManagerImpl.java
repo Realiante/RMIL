@@ -155,15 +155,37 @@ class RmilGridManagerImpl implements RmilGridManager {
     }
 
     private void clearBacklog(RemoteThread thread) {
-        while (!localSrcListeners.isEmpty() || (thread != null && distSrcListenersMap.containsKey(thread.getID())
+        if (thread == null) {
+            clearBacklogLocally();
+        } else {
+            clearBacklogRemotely(thread);
+        }
+    }
+
+    private void clearBacklogRemotely(RemoteThread thread) {
+        var canFromNode = false;
+        while (!localSrcListeners.isEmpty() || (canFromNode = thread != null
+                && distSrcListenersMap.containsKey(thread.getID())
                 && !distSrcListenersMap.get(thread.getID()).isEmpty())) {
-            clearBacklogFromNode(thread);
+            if (canFromNode) {
+                clearBacklogFromNode(thread);
+            }
             if (thread.getPriority() == ServerConfiguration.Priority.NORMAL) {
                 try {
                     localSrcListeners.pop().onAvailable(thread);
                 } catch (NoSuchElementException ignored) {
                     //ignored exception
                 }
+            }
+        }
+    }
+
+    private void clearBacklogLocally() {
+        while (!localSrcListeners.isEmpty()) {
+            try {
+                localSrcListeners.pop().onAvailable(null);
+            } catch (NoSuchElementException ignored) {
+                //ignored exception
             }
         }
     }
