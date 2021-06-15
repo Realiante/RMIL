@@ -19,7 +19,7 @@ class EngineBindingTest {
     void setup() {
         EngineBuilder.release();
         Assertions.assertDoesNotThrow(() -> {
-            manager = EngineBuilder.buildOrGet();
+            manager = EngineBuilder.buildDefaultOrGet();
             registry = LocateRegistry.getRegistry(null);
         });
     }
