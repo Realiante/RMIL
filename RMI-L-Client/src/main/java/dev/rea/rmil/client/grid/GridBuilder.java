@@ -13,7 +13,7 @@ public final class GridBuilder {
 
     public static RmilGridManager buildGrid() {
         //todo: create a mechanism to get a set of all server addresses
-        Set<ServerAddress> addresses = new HashSet<>();
+        Set<String> addresses = new HashSet<>();
         int maxLocalTasks = Runtime.getRuntime().availableProcessors();
         return new RmilGridManagerImpl(maxLocalTasks, addresses);
     }

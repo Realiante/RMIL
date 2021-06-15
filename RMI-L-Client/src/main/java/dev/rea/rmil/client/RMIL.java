@@ -3,6 +3,8 @@ package dev.rea.rmil.client;
 import dev.rea.rmil.client.grid.GridBuilder;
 
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.*;
 
@@ -65,6 +67,16 @@ public final class RMIL {
 
     public static void setRetry(int tries) {
         gridManager.setRetry(tries);
+    }
+
+    public static void addServer(String address) {
+        Set<String> singleton = new HashSet<>();
+        singleton.add(address);
+        gridManager.addServers(singleton);
+    }
+
+    public static void addServers(Set<String> addresses) {
+        gridManager.addServers(addresses);
     }
 
 }

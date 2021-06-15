@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.*;
 import java.util.stream.Collectors;
 
-//todo: test the dist to dist operations
+//todo: Add shutdown hook to clean up after yourself
 class RmilGridManagerImpl implements RmilGridManager {
 
     private static final Logger logger = LoggerFactory.getLogger(RmilGridManagerImpl.class);
@@ -46,13 +46,13 @@ class RmilGridManagerImpl implements RmilGridManager {
     private TimeUnit awaitTimeunit = TimeUnit.SECONDS;
     private int maxLocalTasks;
 
-    public RmilGridManagerImpl(int maxLocalTasks, Set<ServerAddress> addresses) {
+    public RmilGridManagerImpl(int maxLocalTasks, Set<String> addresses) {
         this.maxLocalTasks = maxLocalTasks;
         this.localCounter = new AtomicInteger(0);
         mapServers(addresses);
     }
 
-    private void mapServers(Set<ServerAddress> addresses) {
+    private void mapServers(Set<String> addresses) {
         List<RemoteThread> threads = new ArrayList<>();
         getAvailableServers(addresses).parallelStream()
                 .forEach(server -> {
@@ -64,8 +64,8 @@ class RmilGridManagerImpl implements RmilGridManager {
         availableRemoteThreads.addAll(threads);
     }
 
-    protected Set<RemoteServer> getAvailableServers(Set<ServerAddress> addresses) {
-        return addresses.parallelStream().map(servAddr -> RemoteServer.load(servAddr.getAddress(), retries))
+    protected Set<RemoteServer> getAvailableServers(Set<String> addresses) {
+        return addresses.parallelStream().map(servAddr -> RemoteServer.load(servAddr, retries))
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .collect(Collectors.toSet());
@@ -376,6 +376,11 @@ class RmilGridManagerImpl implements RmilGridManager {
     @Override
     public void setRetry(int tries) {
         this.retries = tries;
+    }
+
+    @Override
+    public void addServers(Set<String> addresses) {
+        mapServers(addresses);
     }
 
     @FunctionalInterface

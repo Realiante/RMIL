@@ -1,5 +1,6 @@
 package dev.rea.rmil.client;
 
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.*;
 
@@ -26,5 +27,7 @@ public interface RmilGridManager {
     void setAwaitTimeout(long timeout, TimeUnit timeUnit);
 
     void setRetry(int tries);
+
+    void addServers(Set<String> addresses);
 
 }
