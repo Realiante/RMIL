@@ -5,7 +5,7 @@ import rea.dev.rmil.remote.RemoteEngine;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 
-public interface EngineRegistration {
+public interface EngineBinding {
 
     RemoteEngine getStub();
 

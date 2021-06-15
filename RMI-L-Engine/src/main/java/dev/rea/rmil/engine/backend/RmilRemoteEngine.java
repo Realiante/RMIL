@@ -1,27 +1,39 @@
 package dev.rea.rmil.engine.backend;
 
-import rea.dev.rmil.remote.BaseTask;
-import rea.dev.rmil.remote.DistBiTask;
-import rea.dev.rmil.remote.DistTask;
-import rea.dev.rmil.remote.RemoteEngine;
-import rea.dev.rmil.remote.items.FunctionPackage;
+import rea.dev.rmil.remote.*;
 
-import java.util.HashMap;
+import java.rmi.RemoteException;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+/*todo: Enforce thread limit across clients, this can be done by client to sever operation, that will reserve a thread
+ *  for that client. Thread will be released for other clients after the operation was successfully completed or after a
+ *  short timeout - Daniel - 15/06/21*/
 
 final class RmilRemoteEngine implements RemoteEngine {
+    private static final long serialVersionUID = 4541222L;
+    private static final String FUNC_ERROR_MSG = "Function with this ID does not exist on " +
+            "this system, or it is not of the correct type";
 
-    private final UUID localIdentifier;
-    private final Map<UUID, BaseTask> functionMap = new HashMap<>();
+    //todo: making the config transient, should study this and see if it can cause unexpected behavior
+    private final transient ServerConfiguration configuration;
+    private final transient Map<UUID, DistributedMethod> functionMap = new ConcurrentHashMap<>();
+    private final transient Map<UUID, Object> objectMap = new ConcurrentHashMap<>();
 
-    protected RmilRemoteEngine() {
-        localIdentifier = UUID.randomUUID();
+    protected RmilRemoteEngine(ServerConfiguration configuration) {
+        this.configuration = Objects.requireNonNull(configuration);
     }
 
     @Override
-    public void registerFunction(FunctionPackage functionPackage, boolean askForItems) {
+    public ServerConfiguration getConfiguration() throws RemoteException {
+        return configuration;
+    }
+
+    @Override
+    public void registerFunction(FunctionPackage functionPackage) {
+        //Todo: Could be a source of collisions, perhaps functions should be stored separately for each client?
         functionMap.put(functionPackage.getFunctionID(), functionPackage.getFunction());
     }
 
@@ -30,32 +42,57 @@ final class RmilRemoteEngine implements RemoteEngine {
         return functionMap.remove(functionID) != null;
     }
 
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings("unchecked") //Should be fine
     @Override
-    public <R, T> R executeTask(UUID functionID, T argument) {
-        DistTask<T, R> function = (DistTask<T, R>) functionMap.get(functionID);
-        return function.execute(argument);
+    public <R> R getItem(UUID itemID) throws RemoteException {
+        var object = objectMap.get(itemID);
+        if (object == null) {
+            throw new IllegalArgumentException("Requested object doesnt exist or does not match the parameter type!");
+        }
+        try {
+            return (R) object;
+        } catch (ClassCastException | NullPointerException exception) {
+            throw new IllegalArgumentException("Requested object doesnt exist or does not match the parameter type!");
+        }
+    }
+
+    @Override
+    public boolean removeItem(UUID itemID) throws RemoteException {
+        return objectMap.remove(itemID) != null;
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public <R, T, A> R executeBiTask(UUID functionID, T argument, A anotherArgument) {
-        DistBiTask<T, A, R> function = (DistBiTask<T, A, R>) functionMap.get(functionID);
-        return function.execute(argument, anotherArgument);
+    public <R, T> R checkAndReturnValue(UUID functionID, ArgumentPackage<T> argumentPackage) throws RemoteException {
+        putArgumentPackage(argumentPackage);
+        return (R) getDistCheck(functionID).check(argumentPackage.getArgument());
     }
 
+    @SuppressWarnings("unchecked")
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        if (!super.equals(o)) return false;
-        var rmilRemoteEngine = (RmilRemoteEngine) o;
-        return localIdentifier.equals(rmilRemoteEngine.localIdentifier);
+    public <R> R checkAndReturnValue(UUID functionID, UUID itemID) throws RemoteException {
+        try {
+            return (R) getDistCheck(functionID).check(getItem(itemID));
+        } catch (ClassCastException exception) {
+            throw new IllegalArgumentException(FUNC_ERROR_MSG);
+        }
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), localIdentifier);
+    @SuppressWarnings("unchecked")
+    private <T, R> DistributedMethod.DistCheck<T, R> getDistCheck(UUID functionID) {
+        var function = functionMap.get(functionID);
+        if (!(function instanceof DistributedMethod.DistCheck)) {
+            throw new IllegalArgumentException(FUNC_ERROR_MSG);
+        }
+        try {
+            return (DistributedMethod.DistCheck<T, R>) function;
+        } catch (ClassCastException exception) {
+            throw new IllegalArgumentException(FUNC_ERROR_MSG);
+        }
+    }
+
+    protected <T> void putArgumentPackage(ArgumentPackage<T> argumentPackage) {
+        objectMap.put(argumentPackage.getItemID(), argumentPackage.getArgument());
     }
 
 }

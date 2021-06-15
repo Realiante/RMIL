@@ -1,6 +1,6 @@
 package dev.rea.rmil.engine.backend;
 
-import dev.rea.rmil.engine.EngineManager;
+import dev.rea.rmil.engine.EngineBinding;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
@@ -10,16 +10,16 @@ import java.rmi.NotBoundException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
-class EngineManagerTest {
+class EngineBindingTest {
 
     static Registry registry;
-    static EngineManager manager;
+    static EngineBinding manager;
 
     @BeforeEach
     void setup() {
         EngineBuilder.release();
         Assertions.assertDoesNotThrow(() -> {
-            manager = EngineBuilder.buildOrGet();
+            manager = EngineBuilder.buildDefaultOrGet();
             registry = LocateRegistry.getRegistry(null);
         });
     }

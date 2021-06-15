@@ -4,5 +4,5 @@ module rmil.client {
     requires org.slf4j;
 
     exports dev.rea.rmil.client;
-    exports dev.rea.rmil.client.manager;
+    exports dev.rea.rmil.client.grid;
 }

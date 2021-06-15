@@ -23,7 +23,8 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>
-                        --add-opens rmil.client/dev.rea.rmil.client.manager=ALL-UNNAMED
+                        --add-opens rmil.client/dev.rea.rmil.client.grid=ALL-UNNAMED
+                        --add-opens rmil.client/dev.rea.rmil.client=ALL-UNNAMED
                         --illegal-access=permit
                         -Xmx1g
                     </argLine>
@@ -71,6 +72,12 @@
         <dependency>
             <groupId>org.awaitility</groupId>
             <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>dev.rea</groupId>
+            <artifactId>rmil.engine</artifactId>
+            <version>0.1-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

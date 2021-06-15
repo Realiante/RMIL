@@ -112,7 +112,7 @@
 
     <dependencyManagement>
         <dependencies>
-            <!--Logging with slf4j binding to log4j-->
+            <!--Logging with slf4j binding to logback-->
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
