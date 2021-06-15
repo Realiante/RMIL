@@ -6,7 +6,7 @@ import dev.rea.rmil.client.grid.RmilGridManagerImpl.CheckResultLocalSrc;
 import dev.rea.rmil.client.grid.RmilGridManagerImpl.OngoingCheckLocalSrc;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -73,9 +73,8 @@ class RmilGridManagerImplCheck_NoGridTest {
         });
     }
 
-
-    @Test
-    @Timeout(value = 60)
+    @RepeatedTest(3)
+    @Timeout(value = 20)
     @SuppressWarnings("unchecked")
     void RemotePathReachableTest() {
         var testSet = Set.of(0, 14, 55, -2, 4, -717, 15, -11, 3, 1);
@@ -106,11 +105,13 @@ class RmilGridManagerImplCheck_NoGridTest {
 
         Set<Integer> filteredSet = new HashSet<>();
         Assertions.assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
-            filteredSet.addAll(testSet.stream().parallel()
+            ForkJoinPool customPool = new ForkJoinPool(4);
+
+            filteredSet.addAll(customPool.submit(() -> testSet.stream().parallel()
                     .map(dm.mapToGrid())
                     .filter(dm.gridPredicate(predicate))
                     .map(DistributedItem::getItem)
-                    .collect(Collectors.toSet()));
+                    .collect(Collectors.toSet())).get());
         });
 
         Assertions.assertEquals(5, filteredSet.size());
@@ -247,7 +248,7 @@ class RmilGridManagerImplCheck_NoGridTest {
         Assertions.assertEquals(Set.of(14, 55, 4, 15, 3), filteredSet);
     }
 
-    @Test
+    @RepeatedTest(2)
     @Timeout(value = 60)
     void remotePredicateTest_LargeSet_NoWaitTime_RemoteExecutionMock() {
         var testSet = IntStream.rangeClosed(-9000, 191000)
@@ -273,7 +274,7 @@ class RmilGridManagerImplCheck_NoGridTest {
         }
 
         Set<Integer> filteredSet = new HashSet<>();
-        Assertions.assertTimeoutPreemptively(Duration.ofSeconds(20), () -> {
+        Assertions.assertTimeoutPreemptively(Duration.ofSeconds(45), () -> {
             filteredSet.addAll(testSet.stream().parallel()
                     .map(dm.mapToGrid())
                     .filter(dm.gridPredicate(predicate))
@@ -284,7 +285,7 @@ class RmilGridManagerImplCheck_NoGridTest {
         Assertions.assertEquals(191000 - 1, filteredSet.size());
     }
 
-    @Test
+    @RepeatedTest(2)
     @Timeout(value = 60)
     void remotePredicateTest_LargeSet_CustomForkJoinPool_NoWaitTime_RemoteExecutionMock() {
         var testSet = IntStream.rangeClosed(-9000, 191000)
