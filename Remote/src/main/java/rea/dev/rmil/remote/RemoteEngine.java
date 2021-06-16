@@ -68,5 +68,8 @@ public interface RemoteEngine extends Remote, Serializable {
     <R> R checkAndReturnValue(UUID functionID, UUID itemID) throws RemoteException;
 
 
+    <R, T> R applyFunction(UUID functionID, ArgumentPackage<T> argumentPackage) throws RemoteException;
+
+    <R> R applyFunction(UUID functionID, UUID itemID) throws RemoteException;
 
 }

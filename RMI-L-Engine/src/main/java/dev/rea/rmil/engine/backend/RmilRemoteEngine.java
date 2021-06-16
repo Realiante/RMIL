@@ -78,6 +78,38 @@ final class RmilRemoteEngine implements RemoteEngine {
         }
     }
 
+
+    @Override
+    public <R, T> R applyFunction(UUID functionID, ArgumentPackage<T> argumentPackage) throws RemoteException {
+        return applyFunction(functionID, argumentPackage.getItemID(), argumentPackage.getItemID());
+    }
+
+    @Override
+    public <R> R applyFunction(UUID functionID, UUID itemID) throws RemoteException {
+        var origin = getItem(itemID);
+        return applyFunction(functionID, itemID, origin);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <R, T> R applyFunction(UUID functionID, UUID itemID, T origin) {
+        var result = (R) getDistFunction(functionID).apply(origin);
+        objectMap.put(itemID, result);
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T, R> DistributedMethod.DistFunction<T, R> getDistFunction(UUID functionID) {
+        var function = functionMap.get(functionID);
+        if (!(function instanceof DistributedMethod.DistFunction)) {
+            throw new IllegalArgumentException(FUNC_ERROR_MSG);
+        }
+        try {
+            return (DistributedMethod.DistFunction<T, R>) function;
+        } catch (ClassCastException exception) {
+            throw new IllegalArgumentException(FUNC_ERROR_MSG);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private <T, R> DistributedMethod.DistCheck<T, R> getDistCheck(UUID functionID) {
         var function = functionMap.get(functionID);
