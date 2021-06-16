@@ -16,11 +16,11 @@ public interface RmilGridManager {
 
     <T, R> Function<DistributedItem<T>, DistributedItem<R>> gridFunction(Function<T, R> function);
 
-    <T> ToIntFunction<DistributedItem<T>> gridToIntFunction(ToIntFunction<T> toIntFunction);
+    <T> Function<DistributedItem<T>, DistributedItem<Integer>> gridToIntFunction(ToIntFunction<T> toIntFunction);
 
-    <T> ToDoubleFunction<DistributedItem<T>> gridToDoubleFunction(ToDoubleFunction<T> toDoubleFunction);
+    <T> Function<DistributedItem<T>, DistributedItem<Double>> gridToDoubleFunction(ToDoubleFunction<T> toDoubleFunction);
 
-    <T> ToLongFunction<DistributedItem<T>> gridToLongFunction(ToLongFunction<T> toFloatFunction);
+    <T> Function<DistributedItem<T>, DistributedItem<Long>> gridToLongFunction(ToLongFunction<T> toFloatFunction);
 
     <T> BinaryOperator<DistributedItem<T>> gridBinaryOperator(BinaryOperator<T> biOperator);
 

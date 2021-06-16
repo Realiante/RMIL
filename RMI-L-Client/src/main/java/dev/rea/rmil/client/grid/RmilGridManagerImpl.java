@@ -97,30 +97,34 @@ class RmilGridManagerImpl implements RmilGridManager {
     @Override
     public <T, R> Function<DistributedItem<T>, DistributedItem<R>> gridFunction(Function<T, R> function) {
         DistFunction<T, R> distFunction = function::apply;
-        return null;
-        //todo
+        return distItem -> doFunction(distFunction, registerMethod(distFunction), distItem);
     }
 
     @Override
-    public <T> ToIntFunction<DistributedItem<T>> gridToIntFunction(ToIntFunction<T> toIntFunction) {
-        return null;
-        //todo
+    public <T> Function<DistributedItem<T>, DistributedItem<Integer>> gridToIntFunction(ToIntFunction<T> toIntFunction) {
+        DistFunction<T, Integer> distFunction = toIntFunction::applyAsInt;
+        return distItem -> doFunction(distFunction, registerMethod(distFunction), distItem);
     }
 
     @Override
-    public <T> ToDoubleFunction<DistributedItem<T>> gridToDoubleFunction(ToDoubleFunction<T> toDoubleFunction) {
-        return null;
-        //todo
+    public <T> Function<DistributedItem<T>, DistributedItem<Double>> gridToDoubleFunction(ToDoubleFunction<T> toDoubleFunction) {
+        DistFunction<T, Double> distFunction = toDoubleFunction::applyAsDouble;
+        return distItem -> doFunction(distFunction, registerMethod(distFunction), distItem);
     }
 
     @Override
-    public <T> ToLongFunction<DistributedItem<T>> gridToLongFunction(ToLongFunction<T> toFloatFunction) {
-        return null;
-        //todo
+    public <T> Function<DistributedItem<T>, DistributedItem<Long>> gridToLongFunction(ToLongFunction<T> toFloatFunction) {
+        DistFunction<T, Long> distFunction = toFloatFunction::applyAsLong;
+        return distItem -> doFunction(distFunction, registerMethod(distFunction), distItem);
     }
 
     @Override
     public <T> BinaryOperator<DistributedItem<T>> gridBinaryOperator(BinaryOperator<T> biOperator) {
+        return null;
+        //todo
+    }
+
+    private <T, R> DistributedItem<R> doFunction(DistFunction<T, R> function, UUID methodID, DistributedItem<T> distributedItem) {
         return null;
         //todo
     }
