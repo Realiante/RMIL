@@ -36,15 +36,15 @@ public final class RMIL {
         return gridManager.gridFunction(function);
     }
 
-    public static <T> ToIntFunction<DistributedItem<T>> gridToIntFunction(ToIntFunction<DistributedItem<T>> toIntFunction) {
+    public static <T> ToIntFunction<DistributedItem<T>> gridToIntFunction(ToIntFunction<T> toIntFunction) {
         return gridManager.gridToIntFunction(toIntFunction);
     }
 
-    public static <T> ToDoubleFunction<DistributedItem<T>> gridToDoubleFunction(ToDoubleFunction<DistributedItem<T>> toDoubleFunction) {
+    public static <T> ToDoubleFunction<DistributedItem<T>> gridToDoubleFunction(ToDoubleFunction<T> toDoubleFunction) {
         return gridManager.gridToDoubleFunction(toDoubleFunction);
     }
 
-    public static <T> ToLongFunction<DistributedItem<T>> gridToLongFunction(ToLongFunction<DistributedItem<T>> toFloatFunction) {
+    public static <T> ToLongFunction<DistributedItem<T>> gridToLongFunction(ToLongFunction<T> toFloatFunction) {
         return gridManager.gridToLongFunction(toFloatFunction);
     }
 

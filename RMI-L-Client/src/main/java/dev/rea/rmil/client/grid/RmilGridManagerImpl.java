@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import rea.dev.rmil.remote.ArgumentPackage;
 import rea.dev.rmil.remote.DistributedMethod;
 import rea.dev.rmil.remote.DistributedMethod.DistCheck;
+import rea.dev.rmil.remote.DistributedMethod.DistFunction;
 import rea.dev.rmil.remote.FunctionPackage;
 import rea.dev.rmil.remote.ServerConfiguration;
 
@@ -95,24 +96,25 @@ class RmilGridManagerImpl implements RmilGridManager {
 
     @Override
     public <T, R> Function<DistributedItem<T>, DistributedItem<R>> gridFunction(Function<T, R> function) {
+        DistFunction<T, R> distFunction = function::apply;
         return null;
         //todo
     }
 
     @Override
-    public <T> ToIntFunction<DistributedItem<T>> gridToIntFunction(ToIntFunction<DistributedItem<T>> toIntFunction) {
+    public <T> ToIntFunction<DistributedItem<T>> gridToIntFunction(ToIntFunction<T> toIntFunction) {
         return null;
         //todo
     }
 
     @Override
-    public <T> ToDoubleFunction<DistributedItem<T>> gridToDoubleFunction(ToDoubleFunction<DistributedItem<T>> toDoubleFunction) {
+    public <T> ToDoubleFunction<DistributedItem<T>> gridToDoubleFunction(ToDoubleFunction<T> toDoubleFunction) {
         return null;
         //todo
     }
 
     @Override
-    public <T> ToLongFunction<DistributedItem<T>> gridToLongFunction(ToLongFunction<DistributedItem<T>> toFloatFunction) {
+    public <T> ToLongFunction<DistributedItem<T>> gridToLongFunction(ToLongFunction<T> toFloatFunction) {
         return null;
         //todo
     }
