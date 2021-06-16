@@ -125,8 +125,61 @@ class RmilGridManagerImpl implements RmilGridManager {
     }
 
     private <T, R> DistributedItem<R> doFunction(DistFunction<T, R> function, UUID methodID, DistributedItem<T> distributedItem) {
-        return null;
-        //todo
+        if (distributedItem.getNodeID() == null) {
+            if (localCounter.incrementAndGet() < maxLocalTasks) {
+                return doLocalFunction(function, distributedItem); // local to local
+            }
+            return doLocalToDistFunction(methodID, distributedItem); // local to dist
+        }
+        return null; // dist to dist
+    }
+
+    private <T, R> DistributedItem<R> doLocalFunction(DistFunction<T, R> function, DistributedItem<T> distributedItem) {
+        var result = function.apply(distributedItem.getItem());
+        clearBacklog(null);
+        localCounter.decrementAndGet();
+        return new DistributedItemFuture<>(distributedItem.getItemID(), result, fetcher);
+    }
+
+    private <T, R> DistributedItem<R> doLocalToDistFunction(UUID methodID, DistributedItem<T> distributedItem) {
+        //this could cause the same issue as check.
+        localCounter.decrementAndGet();
+        OperationResult<R> result = doFunctionFromLocal(
+                new OngoingFunctionLocalSrc<>(methodID,
+                        new ArgumentPackage<>(distributedItem.getItem(), distributedItem.getItemID())));
+        return new DistributedItemFuture<>(distributedItem.getItemID(), result.thread.getID(), null, fetcher);
+    }
+
+    private <T, R> OperationResult<R> doFunctionFromLocal(OngoingFunctionLocalSrc<T, R> ongoingFunction) {
+        getNextThread().ifPresentOrElse(remoteThread -> {
+            if (ongoingFunction.removeListener()) {
+                //todo: try apply function
+            }
+        }, () -> ongoingFunction.returnValueRef.set(null)); //todo: try apply when available
+        return ongoingFunction.returnValueRef.get();
+    }
+
+    private <T, R> void tryApplyFunctionFromLocal(OngoingFunctionLocalSrc<T, R> ongoingFunction, RemoteThread remoteThread, int i) {
+        try {
+            ongoingFunction.returnValueRef.set(applyOnRemote(remoteThread,
+                    ongoingFunction.methodID, ongoingFunction.argumentPackage));
+        } catch (RemoteException e) {
+            logger.error(String.format("Remote exception while attempting to execute a task on %s " +
+                    ": tries left=%s", remoteThread.getAddress(), retries - i));
+            if (i < retries) {
+                tryApplyFunctionFromLocal(ongoingFunction, remoteThread, ++i);
+            } else {
+                ongoingFunction.listen();
+                ongoingFunction.returnValueRef.set(doFunctionFromLocal(ongoingFunction));
+            }
+        }
+    }
+
+    private <T, R> OperationResult<R> applyOnRemote(RemoteThread thread, UUID methodID,
+                                                    ArgumentPackage<T> argumentPackage) throws RemoteException {
+        R returnValue = thread.getExecutorContainer().applyFunction(methodID, argumentPackage);
+        finalizeThread(thread);
+        return new OperationResult<>(thread, returnValue);
     }
 
     private <T, R> R check(DistCheck<T, R> checkFunc, UUID methodID, DistributedItem<T> distributedItem) {
@@ -425,9 +478,44 @@ class RmilGridManagerImpl implements RmilGridManager {
 
     }
 
+    //todo: Bloat reduction. All results should be this
+    private class OperationResult<R> {
+        public final RemoteThread thread;
+        public final R result;
+
+        public OperationResult(RemoteThread thread, R result) {
+            this.thread = thread;
+            this.result = result;
+        }
+    }
+
+    private class OngoingFunctionLocalSrc<T, R> {
+        public final UUID methodID;
+        public final AtomicReference<OperationResult<R>> returnValueRef;
+        public final CountDownLatch countDown;
+        public final ArgumentPackage<T> argumentPackage;
+        private final ServerAvailabilityListener listener;
+
+        public OngoingFunctionLocalSrc(UUID methodID, ArgumentPackage<T> argumentPackage) {
+            this.methodID = methodID;
+            this.argumentPackage = argumentPackage;
+            this.returnValueRef = new AtomicReference<>();
+            this.countDown = new CountDownLatch(1);
+            this.listener = server -> returnValueRef.set(null);//todo:add function listener
+            listen();
+        }
+
+        public boolean removeListener() {
+            return localSrcListeners.remove(listener);
+        }
+
+        public void listen() {
+            localSrcListeners.add(listener);
+        }
+    }
+
     /*todo To save work, these ongoing classes should have had the same parent
       this could save space and work in the future by introducing common logic*/
-
     protected class OngoingCheckDistSrc<T, R> {
         public final UUID methodID;
         public final AtomicReference<R> returnValueRef;
