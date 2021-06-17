@@ -1,17 +1,19 @@
 package dev.rea.rmil.client.items;
 
 import dev.rea.rmil.client.DistributedItem;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.rmi.RemoteException;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
 
 public final class DistributedItemFuture<T> implements DistributedItem<T> {
 
+    private static final Logger logger = LoggerFactory.getLogger(DistributedItemFuture.class);
+
     private final UUID itemID;
-    private final Future<T> itemFuture;
+    private final ItemFetcher fetcher;
     private UUID nodeID;
     private T nativeItem;
 
@@ -22,8 +24,12 @@ public final class DistributedItemFuture<T> implements DistributedItem<T> {
     public DistributedItemFuture(UUID itemID, UUID nodeID, T item, ItemFetcher fetcher) {
         this.itemID = itemID;
         this.nodeID = nodeID;
-        this.itemFuture = new FutureTask<>(() -> fetcher.getItem(nodeID, itemID));
         this.nativeItem = item;
+        this.fetcher = fetcher;
+    }
+
+    public DistributedItemFuture(UUID itemID, UUID nodeID, ItemFetcher fetcher) {
+        this(itemID, nodeID, null, fetcher);
     }
 
     @Override
@@ -31,10 +37,10 @@ public final class DistributedItemFuture<T> implements DistributedItem<T> {
         if (nodeID == null) {
             return nativeItem;
         }
-
         try {
-            return itemFuture.get();
-        } catch (InterruptedException | ExecutionException e) {
+            return fetcher.getItem(nodeID, itemID);
+        } catch (RemoteException e) {
+            logger.error("Remote exception while attempting to retrieve an item", e);
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
         }
@@ -70,13 +76,6 @@ public final class DistributedItemFuture<T> implements DistributedItem<T> {
         } else {
             return 1;
         }
-    }
-
-    public void updateItem(T localItem) {
-        if (localItem == null) {
-            throw new NullPointerException();
-        }
-        this.nativeItem = localItem;
     }
 
     @Override

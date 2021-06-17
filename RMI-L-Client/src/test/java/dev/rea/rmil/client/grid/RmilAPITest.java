@@ -2,12 +2,14 @@ package dev.rea.rmil.client.grid;
 
 import dev.rea.rmil.engine.EngineBinding;
 import dev.rea.rmil.engine.backend.EngineBuilder;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.RepeatedTest;
-import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import rea.dev.rmil.remote.RemoteEngine;
 import rea.dev.rmil.remote.ServerConfiguration;
 
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.Set;
@@ -20,11 +22,13 @@ import java.util.stream.IntStream;
 import static dev.rea.rmil.client.RMIL.*;
 
 class RmilAPITest {
-    private static final int maxEngineThreads = Runtime.getRuntime().availableProcessors();
-    private static final int parallelism = maxEngineThreads + 1;
-    private static EngineBinding engineBinding;
-    private static UUID serverID;
+    private static final Logger logger = LoggerFactory.getLogger(RmilAPITest.class);
 
+    private static final int maxEngineThreads = Runtime.getRuntime().availableProcessors();
+    private static final int parallelism = maxEngineThreads + 60;
+    private static EngineBinding engineBinding;
+    private static RemoteEngine engineStub;
+    private static UUID serverID;
 
     @BeforeAll
     static void setup() {
@@ -32,50 +36,131 @@ class RmilAPITest {
             serverID = UUID.randomUUID();
             engineBinding = EngineBuilder.build(
                     new ServerConfiguration(serverID, maxEngineThreads, ServerConfiguration.Priority.NORMAL));
+            engineStub = engineBinding.getStub();
+
             //adds local test server as server
             addServer(null);
             setAwaitTimeout(30, TimeUnit.SECONDS);
             setRetry(0);
         });
+        logger.info("Starting tests with parallelism=" + parallelism);
     }
 
-    @RepeatedTest(3)
-    @Timeout(value = 60)
+    @AfterAll
+    static void cleanUp() {
+        try {
+            Assertions.assertFalse(engineStub.removeItem(UUID.randomUUID()));
+            engineBinding.unbind();
+        } catch (NotBoundException | RemoteException notBoundException) {
+            Assertions.fail(notBoundException);
+        }
+    }
+
+    @BeforeEach
+    void maxTaskSetup() {
+        setMaxLocalTasks(1);
+    }
+
+    @Test
+    @Timeout(value = 30)
+    void unconnectedChainTest() {
+        setMaxLocalTasks(0);
+        Assertions.assertDoesNotThrow(() -> {
+            var testStream = IntStream.rangeClosed(-3, 3)
+                    .boxed().collect(Collectors.toSet());
+            Assertions.assertEquals(7, testStream.size());
+            var customPool = new ForkJoinPool(parallelism);
+            Assertions.assertTimeoutPreemptively(Duration.ofSeconds(20), () -> {
+                Set<Integer> result = customPool.submit(() -> testStream.stream().parallel()
+                        .map(mapToGrid())
+                        .filter(gridPredicate(new TestPredicate(0)))
+                        .map(mapFromGrid())
+                        .map(integer -> integer + 1)
+                        .map(mapToGrid())
+                        .map(gridFunction(new TestMap()))
+                        .map(mapFromGrid()).collect(Collectors.toSet())
+                ).get();
+                Assertions.assertEquals(Set.of(2, 3, 4, 5), result);
+            });
+        });
+    }
+
+    @RepeatedTest(2)
+    @Timeout(value = 30)
+    void testPredicate() {
+        setMaxLocalTasks(0);
+        Assertions.assertDoesNotThrow(() -> {
+            var testStream = IntStream.rangeClosed(-10, 10)
+                    .boxed().collect(Collectors.toSet());
+            Assertions.assertEquals(21, testStream.size());
+            var customPool = new ForkJoinPool(parallelism);
+            Assertions.assertTimeoutPreemptively(Duration.ofSeconds(20), () -> {
+                Set<Integer> result = customPool.submit(() -> testStream.stream().parallel()
+                        .map(mapToGrid())
+                        .filter(gridPredicate(new TestPredicate(0)))
+                        .map(mapFromGrid()).collect(Collectors.toSet())).get();
+                Assertions.assertEquals(11, result.size());
+            });
+        });
+    }
+
+    @RepeatedTest(2)
+    @Timeout(value = 30)
     void testChainPredicate() {
         setMaxLocalTasks(0);
         Assertions.assertDoesNotThrow(() -> {
             var testStream = IntStream.rangeClosed(-1000, 1000)
                     .boxed().collect(Collectors.toSet());
-            var customPool = new ForkJoinPool(parallelism);
             Assertions.assertTimeoutPreemptively(Duration.ofSeconds(20), () -> {
-                Set<Integer> result = new HashSet<>(customPool.submit(() -> testStream.stream().map(mapToGrid())
-                        .filter(gridPredicate(num -> num >= -500))
-                        .filter(gridPredicate(num -> num <= 500))
-                        .filter(gridPredicate(num -> num > 0))
-                        .filter(gridPredicate(num -> num < 100))
-                        .map(mapFromGrid()).collect(Collectors.toSet())).get());
-                Assertions.assertEquals(99, result.size());
+                Set<Integer> result = testStream.stream()
+                        .map(mapToGrid())
+                        .filter(gridPredicate(new TestPredicate(0)))
+                        .filter(gridPredicate(new TestPredicate(1)))
+                        .filter(gridPredicate(new TestPredicate(2)))
+                        .map(mapFromGrid()).collect(Collectors.toSet());
+                Assertions.assertEquals(49, result.size());
             });
         });
     }
 
-    @RepeatedTest(3)
-    @Timeout(value = 60)
+    @RepeatedTest(2)
+    @Timeout(value = 120)
     void testChainParallelPredicate() {
         setMaxLocalTasks(0);
         Assertions.assertDoesNotThrow(() -> {
-            var testStream = IntStream.rangeClosed(-1000, 1000)
+            var testStream = IntStream.rangeClosed(-100, 100)
                     .boxed().collect(Collectors.toSet());
             var customPool = new ForkJoinPool(parallelism);
             Assertions.assertTimeoutPreemptively(Duration.ofSeconds(20), () -> {
                 Set<Integer> result = new HashSet<>(customPool.submit(() -> testStream.stream().parallel()
                         .map(mapToGrid())
-                        .filter(gridPredicate(num -> num >= -500))
-                        .filter(gridPredicate(num -> num <= 500))
-                        .filter(gridPredicate(num -> num > 0))
-                        .filter(gridPredicate(num -> num < 100))
+                        .filter(gridPredicate(new TestPredicate(0)))
+                        .filter(gridPredicate(new TestPredicate(1)))
+                        .filter(gridPredicate(new TestPredicate(2)))
+                        .filter(gridPredicate(new TestPredicate(3)))
                         .map(mapFromGrid()).collect(Collectors.toSet())).get());
-                Assertions.assertEquals(99, result.size());
+                Assertions.assertEquals(9, result.size());
+            });
+        });
+    }
+
+
+    @RepeatedTest(2)
+    @Timeout(value = 30)
+    void testFunction() {
+        setMaxLocalTasks(0);
+        Assertions.assertDoesNotThrow(() -> {
+            var testStream = IntStream.rangeClosed(-5, 2)
+                    .boxed().collect(Collectors.toSet());
+            var customPool = new ForkJoinPool(parallelism);
+            Assertions.assertTimeoutPreemptively(Duration.ofSeconds(20), () -> {
+                Set<Double> result = customPool.submit(() ->
+                        testStream.stream().parallel().map(mapToGrid())
+                                .map(gridToDoubleFunction(new TestToDouble()))
+                                .map(mapFromGrid())
+                                .collect(Collectors.toSet())).get();
+                Assertions.assertEquals(8, result.size());
+                Assertions.assertEquals(Set.of(-7.5, -6.0, -4.5, -3.0, -1.5, 0.0, 1.5, 3.0), result);
             });
         });
     }

@@ -7,6 +7,8 @@ import java.util.UUID;
 
 interface RemoteThread {
 
+    RemoteThread getParent();
+
     String getAddress();
 
     UUID getID();

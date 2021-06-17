@@ -15,11 +15,7 @@ import rea.dev.rmil.remote.ServerConfiguration;
 
 import java.rmi.RemoteException;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.*;
 import java.util.stream.Collectors;
@@ -28,28 +24,20 @@ import java.util.stream.Collectors;
 class RmilGridManagerImpl implements RmilGridManager {
 
     private static final Logger logger = LoggerFactory.getLogger(RmilGridManagerImpl.class);
-
     private final GridItemFetcher fetcher = new GridItemFetcher();
-
     private final Map<UUID, DistributedMethod> functionMap = new ConcurrentHashMap<>();
     private final Map<UUID, RemoteServer> serverMap = new ConcurrentHashMap<>();
     private final Map<UUID, Deque<ServerAvailabilityListener>> distSrcListenersMap = new ConcurrentHashMap<>();
-
     private final Deque<ServerAvailabilityListener> localSrcListeners = new ConcurrentLinkedDeque<>();
     private final Deque<RemoteThread> availableRemoteThreads = new ConcurrentLinkedDeque<>();
     private final Deque<RemoteThread> availableLowPriorityThreads = new ConcurrentLinkedDeque<>();
-
-    private final AtomicInteger localCounter;
-
-
+    private Semaphore localCounter;
     private int retries = 1;
     private long awaitTimeout = 60;
     private TimeUnit awaitTimeunit = TimeUnit.SECONDS;
-    private int maxLocalTasks;
 
     public RmilGridManagerImpl(int maxLocalTasks, Set<String> addresses) {
-        this.maxLocalTasks = maxLocalTasks;
-        this.localCounter = new AtomicInteger(0);
+        this.localCounter = new Semaphore(maxLocalTasks);
         mapServers(addresses);
     }
 
@@ -66,6 +54,7 @@ class RmilGridManagerImpl implements RmilGridManager {
     }
 
     protected Set<RemoteServer> getAvailableServers(Set<String> addresses) {
+        logger.debug(String.format("Attempting to load servers from: %s", addresses));
         return addresses.parallelStream().map(servAddr -> RemoteServer.load(servAddr, retries))
                 .filter(Optional::isPresent)
                 .map(Optional::get)
@@ -74,7 +63,7 @@ class RmilGridManagerImpl implements RmilGridManager {
 
     @Override
     public void setMaxLocalTasks(int max) {
-        this.maxLocalTasks = max;
+        this.localCounter = new Semaphore(max);
     }
 
     @Override
@@ -124,12 +113,24 @@ class RmilGridManagerImpl implements RmilGridManager {
         //todo
     }
 
+    private <P> P localSourceOperation(Supplier<P> localToLocal, Supplier<P> localToRemote) {
+        if (localCounter.tryAcquire()) {
+            try {
+                return localToLocal.get();
+            } finally {
+                localCounter.release();
+            }
+        } else {
+            return localToRemote.get();
+        }
+    }
+
     private <T, R> DistributedItem<R> doFunction(DistFunction<T, R> function, UUID methodID, DistributedItem<T> distributedItem) {
         if (distributedItem.getNodeID() == null) {
-            if (localCounter.incrementAndGet() < maxLocalTasks) {
-                return doLocalFunction(function, distributedItem); // local to local
-            }
-            return doLocalToDistFunction(methodID, distributedItem); // local to dist
+            return localSourceOperation(
+                    () -> doLocalFunction(function, distributedItem),
+                    () -> doLocalToDistFunction(methodID, distributedItem)
+            );
         }
         return null; // dist to dist
     }
@@ -137,25 +138,30 @@ class RmilGridManagerImpl implements RmilGridManager {
     private <T, R> DistributedItem<R> doLocalFunction(DistFunction<T, R> function, DistributedItem<T> distributedItem) {
         var result = function.apply(distributedItem.getItem());
         clearBacklog(null);
-        localCounter.decrementAndGet();
         return new DistributedItemFuture<>(distributedItem.getItemID(), result, fetcher);
     }
 
     private <T, R> DistributedItem<R> doLocalToDistFunction(UUID methodID, DistributedItem<T> distributedItem) {
         //this could cause the same issue as check.
-        localCounter.decrementAndGet();
         OperationResult<R> result = doFunctionFromLocal(
                 new OngoingFunctionLocalSrc<>(methodID,
                         new ArgumentPackage<>(distributedItem.getItem(), distributedItem.getItemID())));
-        return new DistributedItemFuture<>(distributedItem.getItemID(), result.thread.getID(), null, fetcher);
+        return new DistributedItemFuture<>(distributedItem.getItemID(), getResultNodeID(result), fetcher);
+    }
+
+    private UUID getResultNodeID(OperationResult<?> result) {
+        if (result.thread == null) {
+            return null;
+        }
+        return result.thread.getID();
     }
 
     private <T, R> OperationResult<R> doFunctionFromLocal(OngoingFunctionLocalSrc<T, R> ongoingFunction) {
         getNextThread().ifPresentOrElse(remoteThread -> {
             if (ongoingFunction.removeListener()) {
-                //todo: try apply function
+                tryApplyFunctionFromLocal(ongoingFunction, remoteThread, 0);
             }
-        }, () -> ongoingFunction.returnValueRef.set(null)); //todo: try apply when available
+        }, () -> applyFromLocalWhenAvailable(ongoingFunction));
         return ongoingFunction.returnValueRef.get();
     }
 
@@ -165,13 +171,39 @@ class RmilGridManagerImpl implements RmilGridManager {
                     ongoingFunction.methodID, ongoingFunction.argumentPackage));
         } catch (RemoteException e) {
             logger.error(String.format("Remote exception while attempting to execute a task on %s " +
-                    ": tries left=%s", remoteThread.getAddress(), retries - i));
+                    ": tries left=%s", remoteThread.getAddress(), retries - i), e);
             if (i < retries) {
                 tryApplyFunctionFromLocal(ongoingFunction, remoteThread, ++i);
             } else {
                 ongoingFunction.listen();
                 ongoingFunction.returnValueRef.set(doFunctionFromLocal(ongoingFunction));
             }
+        }
+    }
+
+    private void clearBacklogFrom(RemoteThread thread) {
+        localSourceOperation(
+                () -> {
+                    clearBacklog(thread);
+                    return null;
+                },
+                () -> null
+        );
+    }
+
+    //todo: from local availability listeners could be merged at no cost
+    private <T, R> void applyFromLocalWhenAvailable(OngoingFunctionLocalSrc<T, R> ongoingFunction) {
+        try {
+            //Awaits listener execution
+            clearBacklogFrom(null);
+            if (!ongoingFunction.countDown.await(awaitTimeout, awaitTimeunit)) {
+                throw new InterruptedException(
+                        "An argument has timed out while awaiting a remote server or a local thread to compute it");
+            }
+        } catch (InterruptedException e) {
+            logger.error("Unexpected interruption: ", e);
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
         }
     }
 
@@ -184,15 +216,10 @@ class RmilGridManagerImpl implements RmilGridManager {
 
     private <T, R> R check(DistCheck<T, R> checkFunc, UUID methodID, DistributedItem<T> distributedItem) {
         if (distributedItem.getNodeID() == null) {
-            var item = distributedItem.getItem();
-            /*todo: rare race condition if a thread checks local counter while a local to dist check was looking at it.
-            this event should be quite rare due to to time an if check takes, and i never seen it myself.
-            in any case, this only introduces slight overhead and in worst case creates 1 additional remote instance
-            this should be investigated, and possibly fixed - daniel 12/06/21 */
-            if (localCounter.incrementAndGet() < maxLocalTasks) {
-                return localCheck(checkFunc, item);
-            }
-            return localToDistCheck(methodID, item, distributedItem);
+            return localSourceOperation(
+                    () -> localCheck(checkFunc, distributedItem.getItem()),
+                    () -> localToDistCheck(methodID, distributedItem)
+            );
         } else {
             return distToDistCheck(methodID, distributedItem);
         }
@@ -201,14 +228,13 @@ class RmilGridManagerImpl implements RmilGridManager {
     private <T, R> R localCheck(DistCheck<T, R> checkFunc, T item) {
         var result = checkFunc.check(item);
         clearBacklog(null);
-        localCounter.decrementAndGet();
         return result;
     }
 
-    private <T, R> R localToDistCheck(UUID methodID, T item, DistributedItem<T> distributedItem) {
+    private <T, R> R localToDistCheck(UUID methodID, DistributedItem<T> distributedItem) {
         //next line is the possible cause of the issue described in the upper method's comment
-        localCounter.decrementAndGet();
-        CheckResultLocalSrc<R> checkResultLocalSrc = checkItemFromLocal(new OngoingCheckLocalSrc<>(methodID, item));
+        CheckResultLocalSrc<R> checkResultLocalSrc = checkItemFromLocal(
+                new OngoingCheckLocalSrc<>(methodID, distributedItem));
         distributedItem.setNodeID(checkResultLocalSrc.responsibleNode);
         return checkResultLocalSrc.returnValue;
     }
@@ -291,10 +317,11 @@ class RmilGridManagerImpl implements RmilGridManager {
 
     protected <T, R> CheckResultLocalSrc<R> checkItemFromLocal(OngoingCheckLocalSrc<T, R> checkFromLocal) {
         getNextThread().ifPresentOrElse(remoteThread -> {
-            if (checkFromLocal.removeListener()) {
-                tryCheckItemFromLocal(checkFromLocal, remoteThread, 0);
-            }
-        }, () -> checkFromLocal.returnValueRef.set(checkWhenAvailableFromLocal(checkFromLocal)));
+                    if (checkFromLocal.removeListener() || checkFromLocal.returnValueRef.get() == null) {
+                        tryCheckItemFromLocal(checkFromLocal, remoteThread, 0);
+                    }
+                },
+                () -> checkFromLocal.returnValueRef.set(checkWhenAvailableFromLocal(checkFromLocal)));
         return checkFromLocal.returnValueRef.get();
     }
 
@@ -328,18 +355,20 @@ class RmilGridManagerImpl implements RmilGridManager {
 
     @SuppressWarnings("java:S6212")
     //suppressing sonarlint, since replacing line 2 R with var would cause executeTask to return an Object instead of R
-    protected <T, R> R checkOnRemote(RemoteThread thread, UUID methodID, ArgumentPackage<T> argumentPackage) throws RemoteException {
+    protected <T, R> CheckResultLocalSrc<R> checkOnRemote(RemoteThread thread, UUID methodID, ArgumentPackage<T> argumentPackage) throws RemoteException {
         R returnValue = thread.getExecutorContainer().checkAndReturnValue(methodID, argumentPackage);
         finalizeThread(thread);
-        return returnValue;
+        return new CheckResultLocalSrc<>(thread.getID(), returnValue);
     }
 
     private void finalizeThread(RemoteThread thread) {
         clearBacklog(thread);
-        if (thread.getPriority() != ServerConfiguration.Priority.LOW) {
-            availableRemoteThreads.add(thread);
-        } else {
-            availableLowPriorityThreads.add(thread);
+        if (thread != null) {
+            if (thread.getPriority() != ServerConfiguration.Priority.LOW) {
+                availableRemoteThreads.add(thread);
+            } else {
+                availableLowPriorityThreads.add(thread);
+            }
         }
     }
 
@@ -349,16 +378,13 @@ class RmilGridManagerImpl implements RmilGridManager {
     protected <T, R> CheckResultLocalSrc<R> checkWhenAvailableFromLocal(OngoingCheckLocalSrc<T, R> checkFromLocal) {
         try {
             //Awaits listener execution
-            if (localCounter.get() <= maxLocalTasks) {
-                localCounter.incrementAndGet();
-                clearBacklog(null);
-                localCounter.decrementAndGet();
-            }
+            clearBacklogFrom(null);
             if (!checkFromLocal.countDown.await(awaitTimeout, awaitTimeunit)) {
                 throw new InterruptedException(
                         "An argument has timed out while awaiting a remote server or a local thread to compute it");
             }
         } catch (InterruptedException e) {
+            logger.error("Unexpected interruption: ", e);
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
         }
@@ -375,9 +401,11 @@ class RmilGridManagerImpl implements RmilGridManager {
     private <T, R> CheckResultDistSrc<R> checkItemFromDist(OngoingCheckDistSrc<T, R> ongoingCheck) {
         var threadOptional = getFirstServerThread(ongoingCheck.item.getNodeID());
         threadOptional.ifPresentOrElse(thread -> {
-            if (ongoingCheck.removeListener())
-                ongoingCheck.returnValueRef.set(sendDistToDistCheck(ongoingCheck, thread, retries));
-        }, () -> ongoingCheck.returnValueRef.set(checkWhenAvailableFromDist(ongoingCheck)));
+                    if (ongoingCheck.removeListener() || ongoingCheck.returnValueRef.get() == null) {
+                        ongoingCheck.returnValueRef.set(sendDistToDistCheck(ongoingCheck, thread, retries));
+                    }
+                },
+                () -> ongoingCheck.returnValueRef.set(checkWhenAvailableFromDist(ongoingCheck)));
         return new CheckResultDistSrc<>(ongoingCheck.thread, ongoingCheck.returnValueRef.get());
     }
 
@@ -398,14 +426,20 @@ class RmilGridManagerImpl implements RmilGridManager {
     }
 
     private <T, R> R checkWhenAvailableFromDist(OngoingCheckDistSrc<T, R> ongoingCheck) {
-        try {
-            if (!ongoingCheck.countDown.await(awaitTimeout, awaitTimeunit)) {
-                throw new InterruptedException(
-                        "An argument has timed out while awaiting a remote server to compute it");
+        var availableOpt = getFirstServerThread(ongoingCheck.item.getNodeID());
+        if (availableOpt.isPresent()) {
+            sendDistToDistCheck(ongoingCheck, availableOpt.get(), retries);
+        } else {
+            try {
+                if (!ongoingCheck.countDown.await(awaitTimeout, awaitTimeunit)) {
+                    throw new InterruptedException(
+                            "An argument has timed out while awaiting a remote server to compute it");
+                }
+            } catch (InterruptedException e) {
+                logger.error("Unexpected interruption: ", e);
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException(e);
         }
         return ongoingCheck.returnValueRef.get();
     }
@@ -469,17 +503,8 @@ class RmilGridManagerImpl implements RmilGridManager {
         }
     }
 
-    public class GridItemFetcher implements ItemFetcher {
-        @Override
-        public <R> R getItem(UUID nodeID, UUID itemID) throws RemoteException {
-            var server = serverMap.get(nodeID);
-            return server.getExecutorContainer().getItem(itemID);
-        }
-
-    }
-
     //todo: Bloat reduction. All results should be this
-    private class OperationResult<R> {
+    private static class OperationResult<R> {
         public final RemoteThread thread;
         public final R result;
 
@@ -489,6 +514,16 @@ class RmilGridManagerImpl implements RmilGridManager {
         }
     }
 
+    public class GridItemFetcher implements ItemFetcher {
+        @Override
+        public <R> R getItem(UUID nodeID, UUID itemID) throws RemoteException {
+            var server = serverMap.get(nodeID);
+            return server.getExecutorContainer().getItem(itemID);
+        }
+
+    }
+
+    //todo: bloat reduction: from local ongoings are quite similar and should only be differentiated by their listener
     private class OngoingFunctionLocalSrc<T, R> {
         public final UUID methodID;
         public final AtomicReference<OperationResult<R>> returnValueRef;
@@ -496,12 +531,27 @@ class RmilGridManagerImpl implements RmilGridManager {
         public final ArgumentPackage<T> argumentPackage;
         private final ServerAvailabilityListener listener;
 
+        @SuppressWarnings("unchecked")
         public OngoingFunctionLocalSrc(UUID methodID, ArgumentPackage<T> argumentPackage) {
             this.methodID = methodID;
             this.argumentPackage = argumentPackage;
             this.returnValueRef = new AtomicReference<>();
             this.countDown = new CountDownLatch(1);
-            this.listener = server -> returnValueRef.set(null);//todo:add function listener
+            this.listener = server -> {
+                try {
+                    if (server == null) {
+                        DistFunction<T, R> function = (DistFunction<T, R>) functionMap.get(methodID);
+                        returnValueRef.set(new OperationResult<>(
+                                null, function.apply(argumentPackage.getArgument())));
+                    } else {
+                        returnValueRef.set(applyOnRemote(server, methodID, argumentPackage));
+                    }
+                } catch (Exception e) {
+                    logger.error("Critical exception while attempting execute task for a waiting thread", e);
+                } finally {
+                    countDown.countDown();
+                }
+            };
             listen();
         }
 
@@ -529,7 +579,15 @@ class RmilGridManagerImpl implements RmilGridManager {
             this.item = item;
             this.countDown = new CountDownLatch(1);
             this.returnValueRef = new AtomicReference<>();
-            this.listener = server -> returnValueRef.set(sendDistToDistCheck(this, server, retries));
+            this.listener = server -> {
+                try {
+                    returnValueRef.set(sendDistToDistCheck(this, server, retries));
+                } catch (Exception e) {
+                    logger.error("Critical exception while attempting execute task for a waiting thread", e);
+                } finally {
+                    countDown.countDown();
+                }
+            };
             listen();
         }
 
@@ -561,17 +619,17 @@ class RmilGridManagerImpl implements RmilGridManager {
         private final ServerAvailabilityListener listener;
 
         @SuppressWarnings("unchecked")
-        public OngoingCheckLocalSrc(UUID methodID, T argument) {
+        public OngoingCheckLocalSrc(UUID methodID, DistributedItem<T> argument) {
             this.methodID = methodID;
-            this.argumentPackage = new ArgumentPackage<>(argument, UUID.randomUUID());
+            this.argumentPackage = new ArgumentPackage<>(argument.getItem(), argument.getItemID());
             this.countDown = new CountDownLatch(1);
             this.returnValueRef = new AtomicReference<>();
             this.listener = server -> {
                 try {
                     if (server == null) {
                         DistCheck<T, R> function = (DistCheck<T, R>) functionMap.get(methodID);
-                        returnValueRef.set(new CheckResultLocalSrc<>(null, function.check(argument)));
-                        localCounter.decrementAndGet();
+                        returnValueRef.set(new CheckResultLocalSrc<>(null,
+                                function.check(argumentPackage.getArgument())));
                     } else {
                         returnValueRef.set(checkOnRemote(server, methodID, argumentPackage));
                     }

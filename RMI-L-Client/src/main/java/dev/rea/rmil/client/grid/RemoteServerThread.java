@@ -15,6 +15,11 @@ class RemoteServerThread implements RemoteThread {
     }
 
     @Override
+    public RemoteThread getParent() {
+        return parent;
+    }
+
+    @Override
     public String getAddress() {
         return parent.getAddress();
     }
@@ -37,13 +42,20 @@ class RemoteServerThread implements RemoteThread {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
+        if (o instanceof RemoteServer && (parent.equals(o))) return true;
         if (!(o instanceof RemoteServerThread)) return false;
-        RemoteServerThread that = (RemoteServerThread) o;
-        return parent.equals(that.parent);
+        return parent.equals(((RemoteServerThread) o).parent);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(parent);
+    }
+
+    @Override
+    public String toString() {
+        return "RemoteServerThread{" +
+                "parent=" + parent +
+                '}';
     }
 }

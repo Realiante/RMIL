@@ -18,9 +18,9 @@ final class RmilRemoteEngine implements RemoteEngine {
             "this system, or it is not of the correct type";
 
     //todo: making the config transient, should study this and see if it can cause unexpected behavior
-    private final transient ServerConfiguration configuration;
-    private final transient Map<UUID, DistributedMethod> functionMap = new ConcurrentHashMap<>();
-    private final transient Map<UUID, Object> objectMap = new ConcurrentHashMap<>();
+    private final ServerConfiguration configuration;
+    private final Map<UUID, DistributedMethod> functionMap = new ConcurrentHashMap<>();
+    private final Map<UUID, Object> objectMap = new ConcurrentHashMap<>();
 
     protected RmilRemoteEngine(ServerConfiguration configuration) {
         this.configuration = Objects.requireNonNull(configuration);
@@ -81,7 +81,7 @@ final class RmilRemoteEngine implements RemoteEngine {
 
     @Override
     public <R, T> R applyFunction(UUID functionID, ArgumentPackage<T> argumentPackage) throws RemoteException {
-        return applyFunction(functionID, argumentPackage.getItemID(), argumentPackage.getItemID());
+        return applyFunction(functionID, argumentPackage.getItemID(), argumentPackage.getArgument());
     }
 
     @Override
