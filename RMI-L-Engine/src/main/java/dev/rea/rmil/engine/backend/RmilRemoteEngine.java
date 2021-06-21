@@ -18,9 +18,9 @@ final class RmilRemoteEngine implements RemoteEngine {
             "this system, or it is not of the correct type";
 
     //todo: making the config transient, should study this and see if it can cause unexpected behavior
-    private final transient ServerConfiguration configuration;
-    private final transient Map<UUID, DistributedMethod> functionMap = new ConcurrentHashMap<>();
-    private final transient Map<UUID, Object> objectMap = new ConcurrentHashMap<>();
+    private final ServerConfiguration configuration;
+    private final Map<UUID, DistributedMethod> functionMap = new ConcurrentHashMap<>();
+    private final Map<UUID, Object> objectMap = new ConcurrentHashMap<>();
 
     protected RmilRemoteEngine(ServerConfiguration configuration) {
         this.configuration = Objects.requireNonNull(configuration);
@@ -73,6 +73,38 @@ final class RmilRemoteEngine implements RemoteEngine {
     public <R> R checkAndReturnValue(UUID functionID, UUID itemID) throws RemoteException {
         try {
             return (R) getDistCheck(functionID).check(getItem(itemID));
+        } catch (ClassCastException exception) {
+            throw new IllegalArgumentException(FUNC_ERROR_MSG);
+        }
+    }
+
+
+    @Override
+    public <R, T> R applyFunction(UUID functionID, ArgumentPackage<T> argumentPackage) throws RemoteException {
+        return applyFunction(functionID, argumentPackage.getItemID(), argumentPackage.getArgument());
+    }
+
+    @Override
+    public <R> R applyFunction(UUID functionID, UUID itemID) throws RemoteException {
+        var origin = getItem(itemID);
+        return applyFunction(functionID, itemID, origin);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <R, T> R applyFunction(UUID functionID, UUID itemID, T origin) {
+        var result = (R) getDistFunction(functionID).apply(origin);
+        objectMap.put(itemID, result);
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T, R> DistributedMethod.DistFunction<T, R> getDistFunction(UUID functionID) {
+        var function = functionMap.get(functionID);
+        if (!(function instanceof DistributedMethod.DistFunction)) {
+            throw new IllegalArgumentException(FUNC_ERROR_MSG);
+        }
+        try {
+            return (DistributedMethod.DistFunction<T, R>) function;
         } catch (ClassCastException exception) {
             throw new IllegalArgumentException(FUNC_ERROR_MSG);
         }

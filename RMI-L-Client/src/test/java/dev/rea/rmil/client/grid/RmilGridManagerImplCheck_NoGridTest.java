@@ -13,7 +13,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import rea.dev.rmil.remote.ServerConfiguration;
 
-import java.rmi.RemoteException;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.Set;
@@ -24,7 +23,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.awaitility.Awaitility.await;
@@ -159,51 +157,6 @@ class RmilGridManagerImplCheck_NoGridTest {
     @ParameterizedTest
     @MethodSource("sleepTimeSource")
     @Timeout(value = 60)
-    void remotePredicateTest_RemoteExecutionMockOnly(int sleepTime, TimeUnit timeUnit, int timeOut) {
-        var testSet = Set.of(0, 14, 55, -2, 4, -717, 15, -11, 3, 1);
-
-        Predicate<Integer> predicate = arg -> {
-            try {
-                timeUnit.sleep(sleepTime);
-            } catch (InterruptedException e) {
-                Assertions.fail(e);
-            }
-            return arg > 1;
-        };
-
-        RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
-                withSettings().useConstructor(0, Set.of()));
-        when(dm.getAvailableServers(anySet())).thenReturn(Set.of(remoteServer, remoteServerLow));
-        when(dm.gridPredicate(predicate)).thenCallRealMethod();
-        when(dm.registerMethod(any())).thenCallRealMethod();
-        when(dm.sendFunctionPackage(any())).thenReturn(Set.of());
-        when(dm.checkItemFromLocal(any())).thenCallRealMethod();
-        when(dm.checkWhenAvailableFromLocal(any())).thenCallRealMethod();
-        when(dm.mapToGrid()).thenCallRealMethod();
-        when(dm.buildDistributedItem(any())).thenCallRealMethod();
-
-        try {
-            when(dm.checkOnRemote(any(), any(), any())).then(invocation ->
-                    predicate.test(invocation.getArgument(2)));
-        } catch (RemoteException e) {
-            Assertions.fail(e);
-        }
-
-        Set<Integer> filteredSet = new HashSet<>();
-        Assertions.assertTimeoutPreemptively(Duration.ofSeconds(timeOut), () -> {
-            filteredSet.addAll(testSet.stream().parallel()
-                    .map(dm.mapToGrid())
-                    .filter(dm.gridPredicate(predicate))
-                    .map(DistributedItem::getItem).collect(Collectors.toSet()));
-        });
-
-        Assertions.assertEquals(5, filteredSet.size());
-        Assertions.assertEquals(Set.of(14, 55, 4, 15, 3), filteredSet);
-    }
-
-    @ParameterizedTest
-    @MethodSource("sleepTimeSource")
-    @Timeout(value = 60)
     void remotePredicateTest_CustomForkJoinPool(int sleepTime, TimeUnit timeUnit, int timeOut) {
         var testSet = Set.of(0, 14, 55, -2, 4, -717, 15, -11, 3, 1);
 
@@ -246,86 +199,6 @@ class RmilGridManagerImplCheck_NoGridTest {
 
         Assertions.assertEquals(5, filteredSet.size());
         Assertions.assertEquals(Set.of(14, 55, 4, 15, 3), filteredSet);
-    }
-
-    @RepeatedTest(2)
-    @Timeout(value = 60)
-    void remotePredicateTest_LargeSet_NoWaitTime_RemoteExecutionMock() {
-        var testSet = IntStream.rangeClosed(-9000, 191000)
-                .boxed().collect(Collectors.toSet());
-
-        Predicate<Integer> predicate = arg -> arg > 1;
-        RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
-                withSettings().useConstructor(4, Set.of()));
-        when(dm.getAvailableServers(anySet())).thenReturn(Set.of(remoteServer, remoteServerLow));
-        when(dm.gridPredicate(predicate)).thenCallRealMethod();
-        when(dm.registerMethod(any())).thenCallRealMethod();
-        when(dm.sendFunctionPackage(any())).thenReturn(Set.of());
-        when(dm.checkItemFromLocal(any())).thenCallRealMethod();
-        when(dm.checkWhenAvailableFromLocal(any())).thenCallRealMethod();
-        when(dm.mapToGrid()).thenCallRealMethod();
-        when(dm.buildDistributedItem(any())).thenCallRealMethod();
-
-        try {
-            when(dm.checkOnRemote(any(), any(), any())).then(invocation ->
-                    predicate.test(invocation.getArgument(2)));
-        } catch (RemoteException e) {
-            Assertions.fail(e);
-        }
-
-        Set<Integer> filteredSet = new HashSet<>();
-        Assertions.assertTimeoutPreemptively(Duration.ofSeconds(45), () -> {
-            filteredSet.addAll(testSet.stream().parallel()
-                    .map(dm.mapToGrid())
-                    .filter(dm.gridPredicate(predicate))
-                    .map(DistributedItem::getItem)
-                    .collect(Collectors.toSet()));
-        });
-
-        Assertions.assertEquals(191000 - 1, filteredSet.size());
-    }
-
-    @RepeatedTest(2)
-    @Timeout(value = 60)
-    void remotePredicateTest_LargeSet_CustomForkJoinPool_NoWaitTime_RemoteExecutionMock() {
-        var testSet = IntStream.rangeClosed(-9000, 191000)
-                .boxed().collect(Collectors.toSet());
-
-        Predicate<Integer> predicate = arg -> arg > 1;
-        RmilGridManagerImpl dm = mock(RmilGridManagerImpl.class,
-                withSettings().useConstructor(4, Set.of()));
-        when(dm.getAvailableServers(anySet())).thenReturn(Set.of(remoteServer, remoteServerLow));
-        when(dm.gridPredicate(predicate)).thenCallRealMethod();
-        when(dm.registerMethod(any())).thenCallRealMethod();
-        when(dm.sendFunctionPackage(any())).thenReturn(Set.of());
-        when(dm.checkItemFromLocal(any())).thenCallRealMethod();
-        when(dm.checkWhenAvailableFromLocal(any())).thenCallRealMethod();
-        when(dm.mapToGrid()).thenCallRealMethod();
-        when(dm.buildDistributedItem(any())).thenCallRealMethod();
-
-        try {
-            when(dm.checkOnRemote(any(), any(), any())).then(invocation ->
-                    predicate.test(invocation.getArgument(2)));
-        } catch (RemoteException e) {
-            Assertions.fail(e);
-        }
-
-        Set<Integer> filteredSet = new HashSet<>();
-        Assertions.assertTimeoutPreemptively(Duration.ofSeconds(20), () -> {
-            ForkJoinPool customPool = new ForkJoinPool(24);
-            try {
-                filteredSet.addAll(customPool.submit(() ->
-                        testSet.stream().parallel()
-                                .map(dm.mapToGrid())
-                                .filter(dm.gridPredicate(predicate))
-                                .map(DistributedItem::getItem).collect(Collectors.toSet()))
-                        .get());
-            } catch (InterruptedException | ExecutionException e) {
-                Assertions.fail(e);
-            }
-        });
-
-        Assertions.assertEquals(191000 - 1, filteredSet.size());
     }
 
 }

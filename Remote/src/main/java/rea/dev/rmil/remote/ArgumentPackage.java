@@ -1,9 +1,10 @@
 package rea.dev.rmil.remote;
 
+import java.io.Serializable;
 import java.util.Objects;
 import java.util.UUID;
 
-public final class ArgumentPackage<T> {
+public final class ArgumentPackage<T> implements Serializable {
 
     private final T argument;
     private final UUID itemID;

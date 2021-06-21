@@ -34,6 +34,7 @@ class RemoteServer implements RemoteThread {
             server.loadContainer(address);
             return server;
         } catch (RemoteException | NotBoundException exception) {
+            exception.printStackTrace();
             logger.info(String.format(
                     "Connection to remote server %s has failed : retries = %s", address, retries), exception);
             if (retries > 0) {
@@ -68,6 +69,11 @@ class RemoteServer implements RemoteThread {
     }
 
     @Override
+    public RemoteThread getParent() {
+        return this;
+    }
+
+    @Override
     public String getAddress() {
         return address;
     }
@@ -90,14 +96,21 @@ class RemoteServer implements RemoteThread {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o instanceof RemoteServerThread) return o.equals(this);
+        if (o instanceof RemoteServerThread) return ((RemoteServerThread) o).getParent().equals(this);
         if (!(o instanceof RemoteServer)) return false;
-        RemoteServer that = (RemoteServer) o;
-        return getAddress().equals(that.getAddress());
+        return getAddress().equals(((RemoteServer) o).getAddress());
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(getAddress());
+    }
+
+    @Override
+    public String toString() {
+        return "RemoteServer{" +
+                "address='" + address + '\'' +
+                ", serverID=" + serverID +
+                '}';
     }
 }

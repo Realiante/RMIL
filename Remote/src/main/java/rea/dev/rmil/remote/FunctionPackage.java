@@ -10,6 +10,9 @@ public final class FunctionPackage implements Serializable {
     private final DistributedMethod function;
 
     public FunctionPackage(UUID functionID, DistributedMethod function) {
+        if (!(function instanceof Serializable)) {
+            throw new IllegalArgumentException("Expecting a Serializable function");
+        }
         this.functionID = functionID;
         this.function = function;
     }

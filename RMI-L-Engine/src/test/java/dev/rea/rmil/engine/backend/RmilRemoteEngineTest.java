@@ -5,15 +5,18 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import rea.dev.rmil.remote.ArgumentPackage;
 import rea.dev.rmil.remote.DistributedMethod.DistCheck;
+import rea.dev.rmil.remote.DistributedMethod.DistFunction;
 import rea.dev.rmil.remote.FunctionPackage;
 
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.function.ToDoubleFunction;
 
 class RmilRemoteEngineTest {
 
     private static RmilRemoteEngine rmilRemoteEngine;
     private static UUID predicateUUID;
+    private static UUID intToDoubleFunctionUUID;
     private static UUID existingIntegerID;
 
     @BeforeAll
@@ -24,6 +27,12 @@ class RmilRemoteEngineTest {
         Predicate<Integer> predicate = integer -> integer > 1;
         DistCheck<Integer, Boolean> predicateFunction = predicate::test;
         rmilRemoteEngine.registerFunction(new FunctionPackage(predicateUUID, predicateFunction));
+
+        intToDoubleFunctionUUID = UUID.randomUUID();
+        ToDoubleFunction<Integer> toDoubleFunction = integer -> ((double) integer * 1.5);
+        DistFunction<Integer, Double> distFunction = toDoubleFunction::applyAsDouble;
+        rmilRemoteEngine.registerFunction(new FunctionPackage(intToDoubleFunctionUUID, distFunction));
+
         existingIntegerID = UUID.randomUUID();
         rmilRemoteEngine.putArgumentPackage(new ArgumentPackage<>(15, existingIntegerID));
     }
@@ -48,6 +57,20 @@ class RmilRemoteEngineTest {
             var result = rmilRemoteEngine.checkAndReturnValue(predicateUUID, existingIntegerID);
             Assertions.assertTrue(result instanceof Boolean);
             Assertions.assertTrue((Boolean) result);
+        });
+    }
+
+    @Test
+    void functionExecutionPackagesTest() {
+        Assertions.assertDoesNotThrow(() -> {
+            var itemID = UUID.randomUUID();
+            var result = rmilRemoteEngine.applyFunction(intToDoubleFunctionUUID,
+                    new ArgumentPackage<>(1, itemID));
+            Assertions.assertTrue(result instanceof Double);
+            Assertions.assertEquals(1.5, result);
+            var storedResult = rmilRemoteEngine.getItem(itemID);
+            Assertions.assertTrue(storedResult instanceof Double);
+            Assertions.assertEquals(result, storedResult);
         });
     }
 
